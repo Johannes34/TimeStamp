@@ -13,6 +13,12 @@ Simple utility to automatically log working times and activities.
 - Automatically track your time in lieu and see your current balance
 - Easily track activities by clicking 'start' buttons
 
+| ![Alt text](/../screenshots/Screenshots/Features.png?raw=true "Features") | ![Alt text](/../screenshots/Screenshots/Features%20(2).png?raw=true "Features") |
+|:-------------:|:-------------:|
+
+
+
+
 
 ## Setup
 - Download the binary files and copy them to a location on your computer where it has read/write permissions
