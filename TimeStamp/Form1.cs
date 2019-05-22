@@ -121,6 +121,9 @@ namespace TimeStamp
             {
                 // TODO: (optionally) ask in a notification, whether have been working or not since last known stamp (default yes, if choosing no will automatically insert a pause)...
 
+                Today = CurrentShown = existing;
+                Today.End = TimeSpan.Zero;
+
                 // assuming the last activity is still valid, and the downtime is not considered a break:
                 // if there is no running activity, try to restore the last activity
                 if (TodayCurrentActivity == null)
@@ -130,14 +133,12 @@ namespace TimeStamp
                         TodayCurrentActivity = openEnd;
                     else
                     {
-                        TodayCurrentActivity = existing.ActivityRecords.LastOrDefault();
-                        TodayCurrentActivity.End = null;
+                        var last = existing.GetLastActivity();
+                        existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowStamp(), Comment = "logged off time" });
+                        StartNewActivity(last.Activity, null);
                     }
                     HighlightCurrentActivity();
                 }
-
-                Today = CurrentShown = existing;
-                Today.End = TimeSpan.Zero;
 
                 PopupDialog.ShowCurrentlyTrackingActivity(this, TodayCurrentActivity.Activity);
                 CreateOrUpdateTrayIconContextMenu();
@@ -170,7 +171,7 @@ namespace TimeStamp
 
         public ActivityRecord TodayCurrentActivity;
 
-        public void StartNewActivity(string name, string comment)
+        public void StartNewActivity(string name, string comment, bool autoMatchLastComment = false)
         {
             // finish current activity:
             if (TodayCurrentActivity != null)
@@ -179,7 +180,7 @@ namespace TimeStamp
             }
 
             // if no comment provided, automatically apply last comment:
-            if (String.IsNullOrEmpty(comment))
+            if (String.IsNullOrEmpty(comment) && autoMatchLastComment)
                 comment = Today.ActivityRecords.Where(r => r.Activity == name && !String.IsNullOrEmpty(r.Comment)).LastOrDefault()?.Comment;
 
             // start new activity:
