@@ -21,7 +21,7 @@ Simple utility to automatically log working times and activities.
 
 
 ## Setup
-- Build the binaries yourself or [download the precompiled binaries here](/../release/Release/TimeStamp.zip?raw=true)
+- Build the binaries yourself or [download the precompiled binaries here](/../release/Release/TimeStamp.msi?raw=true)
 - Download the binary files and copy them to a location on your computer where it has read/write permissions
 - Execute TimeStamp.exe
 - The times are logged in a file next to the .exe called StampFile.xml
