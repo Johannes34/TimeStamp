@@ -60,9 +60,8 @@ namespace TimeStamp
                     "Paid Requirements",
                     "Product Development",
                     "Product Support",
-                    "Mentor Product Requirements",
                     "Meetings",
-                    "Mentor / Siemens Integration"
+                    "Documentation"
                 };
             }
 

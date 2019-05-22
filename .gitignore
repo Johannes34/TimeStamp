@@ -3,3 +3,12 @@
 ################################################################################
 
 /.vs
+/packages
+/TimeStamp.Tests/bin/Debug
+/TimeStamp.Tests/obj/Debug
+/TimeStamp/bin/Debug
+/TimeStamp/obj/x86
+/TimeStamp/bin/Release
+/TimeStamp.Tests/bin/Release
+/TimeStamp.Tests/obj/Release
+/TimeStamp.Setup/Release
