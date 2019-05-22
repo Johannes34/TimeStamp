@@ -13,6 +13,7 @@ Simple utility to automatically log working times and activities.
 - Automatically track your time in lieu and see your current balance
 - Easily track activities by clicking 'start' buttons
 
+
 ## Setup
 - Download the binary files and copy them to a location on your computer where it has read/write permissions
 - Execute TimeStamp.exe
