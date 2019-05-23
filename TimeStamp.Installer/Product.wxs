@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="TimeStamp" Language="1033" Version="1.0.0.0" Manufacturer="Johannes34" UpgradeCode="f21643ba-8e94-4e66-873f-d5d6aba86170">
+    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Feature Id="ProductFeature" Title="TimeStamp" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="ApplicationShortcut" />
+      <ComponentRef Id="ApplicationShortcut2" />
+    </Feature>
+
+    <!-- Icon: -->
+    <Icon Id="app2.ico" SourceFile="..\TimeStamp\app2.ico"/>
+    <Property Id="ARPPRODUCTICON" Value="app2.ico" />
+
+    <!-- UI: -->
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch TimeStamp" />
+    <UI>
+      <UIRef Id="WixUI_InstallDir" />
+      <Publish Dialog="WelcomeDlg"
+            Control="Next"
+            Event="NewDialog"
+            Value="InstallDirDlg"
+            Order="2">1</Publish>
+      <Publish Dialog="InstallDirDlg"
+            Control="Back"
+            Event="NewDialog"
+            Value="WelcomeDlg"
+            Order="2">1</Publish>
+      <Publish Dialog="ExitDialog"
+            Control="Finish"
+            Event="DoAction"
+            Value="LaunchApplication">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+    </UI>
+
+    <!-- Custom Action: -->
+    <Property Id="WixShellExecTarget" Value="[#TimeStamp.exe]" />
+    <CustomAction Id="LaunchApplication" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" />
+
+  </Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="AppDataFolder">
+        <Directory Id="INSTALLFOLDER" Name="TimeStamp" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+      <Directory Id="StartupFolder" />
+    </Directory>
+  </Fragment>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+
+      <Component Id="ProductComponent" Guid="318e590b-5c01-4597-a710-26835764f7c2">
+        <File Source="$(var.TimeStamp.TargetPath)" />
+        <RegistryValue Root="HKCU" Key="Software\TimeStamp" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+        <RemoveFolder Id="RemoveAppDataFolder" Directory="INSTALLFOLDER" On="uninstall"/>
+      </Component>
+
+      <Component Id="EPPlus.dll" Guid="cb555cdc-1d55-4ee5-8609-b40bcae83eba">
+        <File Id="EPPlus.dll" Source="..\TimeStamp\bin\Release\EPPlus.dll" />
+        <RegistryValue Root="HKCU" Key="Software\TimeStamp" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+
+      <Component Id="MouseKeyboardActivityMonitor.dll" Guid="75277d98-2bd7-46b0-8bfb-7b1c6b72f5b5">
+        <File Id="MouseKeyboardActivityMonitor.dll" Source="..\TimeStamp\bin\Release\MouseKeyboardActivityMonitor.dll"/>
+        <RegistryValue Root="HKCU" Key="Software\TimeStamp" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+
+    </ComponentGroup>
+
+    <!-- Start Menu Shortcut: -->
+    <DirectoryRef Id="ProgramMenuFolder">
+      <Component Id="ApplicationShortcut" Guid="c0dc0aa1-e683-43a9-85d2-a4564a64a25e">
+        <Shortcut Id="ApplicationStartMenuShortcut"
+                  Name="TimeStamp"
+                  Description="Simple utility to automatically log working times and activities"
+                  Target="[#TimeStamp.exe]"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="app2.ico"/>
+        <RemoveFolder Id="CleanUpShortCut" Directory="ProgramMenuFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\TimeStamp" Name="installed2" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+
+    <!-- Startup Folder Shortcut: -->
+    <DirectoryRef Id="StartupFolder">
+      <Component Id="ApplicationShortcut2" Guid="d7d1f67d-1a0d-4d7e-8bae-4821e5c4384a">
+        <Shortcut Id="ApplicationStartupShortcut"
+                  Name="TimeStamp"
+                  Description="Simple utility to automatically log working times and activities"
+                  Target="[#TimeStamp.exe]"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="app2.ico"/>
+        <RemoveFolder Id="CleanUpShortCut2" Directory="StartupFolder" On="uninstall"/>
+        <RegistryValue Root="HKCU" Key="Software\TimeStamp" Name="installed3" Type="integer" Value="1" KeyPath="yes"/>
+      </Component>
+    </DirectoryRef>
+  </Fragment>
+</Wix>
