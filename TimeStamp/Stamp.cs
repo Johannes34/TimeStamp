@@ -175,7 +175,7 @@ namespace TimeStamp
             get
             {
                 if (Day == DateTime.Today && End == TimeSpan.Zero)
-                    return Form1.GetNowStamp().Subtract(Begin).Subtract(Pause);
+                    return Form1.GetNowTime().Subtract(Begin).Subtract(Pause);
                 else
                     return End.Subtract(Begin).Subtract(Pause);
             }
@@ -246,7 +246,7 @@ namespace TimeStamp
                     return TimeSpan.Zero;
 
                 if (!End.HasValue) // assuming this can only happen if it is the today's stamp and not yet checked out...
-                    return Form1.GetNowStamp() - Begin.Value;
+                    return Form1.GetNowTime() - Begin.Value;
 
                 return End.Value - Begin.Value;
             }

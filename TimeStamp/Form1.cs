@@ -134,7 +134,7 @@ namespace TimeStamp
                     else
                     {
                         var last = existing.GetLastActivity();
-                        existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowStamp(), Comment = "logged off time" });
+                        existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
                         StartNewActivity(last.Activity, null);
                     }
                     HighlightCurrentActivity();
@@ -148,7 +148,7 @@ namespace TimeStamp
             // new day, new stamp:
 
             TodayCurrentActivity = null;
-            Today = CurrentShown = new Stamp(DateTime.Today, GetNowStamp());
+            Today = CurrentShown = new Stamp(DateTime.Today, GetNowTime());
             StampList.Add(Today);
 
             if (String.IsNullOrEmpty(AlwaysStartNewDayWithActivity))
@@ -176,7 +176,7 @@ namespace TimeStamp
             // finish current activity:
             if (TodayCurrentActivity != null)
             {
-                TodayCurrentActivity.End = GetNowStamp();
+                TodayCurrentActivity.End = GetNowTime();
             }
 
             // if no comment provided, automatically apply last comment:
@@ -184,7 +184,7 @@ namespace TimeStamp
                 comment = Today.ActivityRecords.Where(r => r.Activity == name && !String.IsNullOrEmpty(r.Comment)).LastOrDefault()?.Comment;
 
             // start new activity:
-            TodayCurrentActivity = new ActivityRecord() { Activity = name, Begin = GetNowStamp(), Comment = comment };
+            TodayCurrentActivity = new ActivityRecord() { Activity = name, Begin = GetNowTime(), Comment = comment };
             Today.ActivityRecords.Add(TodayCurrentActivity);
 
             HighlightCurrentActivity();
@@ -195,7 +195,7 @@ namespace TimeStamp
         {
             if (TodayCurrentActivity != null)
             {
-                TodayCurrentActivity.End = GetNowStamp();
+                TodayCurrentActivity.End = GetNowTime();
                 TodayCurrentActivity = null;
             }
 
@@ -207,10 +207,6 @@ namespace TimeStamp
         // TODO:
 
         // LOW PRIO:
-
-        // comment field in 'activity' notification popup, delaying close when inputting
-
-        // prevent duplicate popups, e.g. after auto-break (log-on activity notification + pause resume notification)
 
         // advanced features to ask whether current activity is still correct,
         //      e.g. after notebook hatch been closed and reopened -> Meeting or Activity before Meeting? https://stackoverflow.com/questions/3355606/detect-laptop-lid-closure-and-opening
@@ -390,7 +386,7 @@ namespace TimeStamp
         {
             // update end time:
             if (Today.Begin.TotalMinutes != 0 && Today.End.TotalMinutes < DateTime.Now.TimeOfDay.TotalMinutes)
-                Today.End = GetNowStamp();
+                Today.End = GetNowTime();
 
             FinishActivity();
 
@@ -502,7 +498,7 @@ namespace TimeStamp
         {
             if (TryParseHHMM(txtEnd.Text, out TimeSpan value))
             {
-                if (value >= GetNowStamp() + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification))
+                if (value >= GetNowTime() + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification))
                     m_endingPopupShownLastTime = default(DateTime);
                 CurrentShown.SetEnd(value);
                 UpdateActivityList();
@@ -1412,9 +1408,9 @@ namespace TimeStamp
             if (lastMouseMove.TotalMinutes != 0 && DateTime.Now.TimeOfDay.Subtract(lastMouseMove).TotalMinutes >= AutomaticPauseRecognitionMinPauseTime)
             {
                 Log("Mouse movement after pause: Today: " + Today + ", Activity: " + TodayCurrentActivity);
-                Today.Pause = new TimeSpan(0, (int)DateTime.Now.TimeOfDay.Subtract(lastMouseMove).TotalMinutes, 0);
+                Today.Pause = GetNowTime() - GetTime(lastMouseMove);
                 var current = TodayCurrentActivity;
-                TodayCurrentActivity.End = lastMouseMove;
+                TodayCurrentActivity.End = GetTime(lastMouseMove);
                 TodayCurrentActivity = null;
                 StartNewActivity(current.Activity, current.Comment + " Resuming after pause...");
 
@@ -1549,9 +1545,14 @@ namespace TimeStamp
             return totalBalance;
         }
 
-        public static TimeSpan GetNowStamp()
+        public static TimeSpan GetNowTime()
         {
-            return new TimeSpan(DateTime.Now.Hour, DateTime.Now.Minute, 0);
+            return GetTime(DateTime.Now.TimeOfDay);
+        }
+
+        public static TimeSpan GetTime(TimeSpan accurate)
+        {
+            return new TimeSpan(accurate.Hours, accurate.Minutes, 0);
         }
 
         #endregion
