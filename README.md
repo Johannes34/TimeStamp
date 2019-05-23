@@ -27,6 +27,7 @@ Simple utility to automatically log working times and activities.
 - Upon first launch, click the 'Manage activities' button and set up your desired activities.
 
 ## Custom Setup
+[![Build Status](https://jojo-meier.visualstudio.com/TimeStamp/_apis/build/status/Johannes34.TimeStamp?branchName=master)](https://jojo-meier.visualstudio.com/TimeStamp/_build/latest?definitionId=4&branchName=master)
 - Build the binaries yourself 
 - Copy them to a location on your computer where it has read/write permissions
 - Execute TimeStamp.exe
