@@ -24,7 +24,7 @@ Simple utility to automatically log working times and activities.
 ## Quick Setup
 - [Download the latest setup here](https://github.com/Johannes34/TimeStamp/releases/latest)
 - A Start menu and Autostart shortcut is automatically being created
-- Upon first launch, click the 'Manage activities' button and set up your desired activities. Those values are stored in the registry.
+- Upon first launch, click the 'Manage activities' button and set up your desired activities.
 
 ## Custom Setup
 - Build the binaries yourself 
