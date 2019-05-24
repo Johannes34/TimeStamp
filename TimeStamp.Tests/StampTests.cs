@@ -1,5 +1,6 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace TimeStamp.Tests
@@ -30,19 +31,23 @@ namespace TimeStamp.Tests
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Development", Begin = stamp.Begin, End = (stamp.End == default(TimeSpan) ? null : (TimeSpan?)stamp.End) });
         }
 
-
+        private TimeManager GetManager()
+        {
+            return new TimeManager(new TimeSettings() { IgnoreStampFile = true, DisablePopupNotifications = true });
+        }
 
         [TestMethod]
         public void TestSetBeginEarlierOnOpenEndStampSetsActivityStartEarlier()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
             AddSingleActivity(stamp);
 
             var newStart = new TimeSpan(09, 05, 00);
 
             // Act:
-            stamp.SetBegin(newStart);
+            tm.SetBegin(stamp, newStart);
 
             // Assert:
             Assert.AreEqual(newStart, stamp.Begin);
@@ -54,13 +59,14 @@ namespace TimeStamp.Tests
         public void TestSetBeginLaterOnOpenEndStampSetsActivityStartLater()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
             AddSingleActivity(stamp);
 
             var newStart = new TimeSpan(09, 30, 00);
 
             // Act:
-            stamp.SetBegin(newStart);
+            tm.SetBegin(stamp, newStart);
 
             // Assert:
             Assert.AreEqual(newStart, stamp.Begin);
@@ -71,16 +77,17 @@ namespace TimeStamp.Tests
         [TestMethod]
         public void TestSetBeginLaterOnOpenEndStampSetsActivityStartLaterAndCutsOffActivity()
         {
+            // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
 
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Support", Begin = stamp.Begin, End = new TimeSpan(09, 25, 00) });
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Development", Begin = new TimeSpan(09, 25, 00), End = (stamp.End == default(TimeSpan) ? null : (TimeSpan?)stamp.End) });
 
-            // Arrange:
             var newStart = new TimeSpan(09, 30, 00);
 
             // Act:
-            stamp.SetBegin(newStart);
+            tm.SetBegin(stamp, newStart);
 
             // Assert:
             Assert.AreEqual(newStart, stamp.Begin);
@@ -94,13 +101,14 @@ namespace TimeStamp.Tests
         public void TestSetEndEarlierOnOpenEndStampSetsActivityEndEarlier()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
             AddSingleActivity(stamp);
 
             var newEnd = new TimeSpan(16, 40, 00);
 
             // Act:
-            stamp.SetEnd(newEnd);
+            tm.SetEnd(stamp, newEnd);
 
             // Assert:
             Assert.AreEqual(newEnd, stamp.End);
@@ -112,13 +120,14 @@ namespace TimeStamp.Tests
         public void TestSetEndEarlierOnStampSetsActivityEndEarlier()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetStamp();
             AddSingleActivity(stamp);
 
             var newEnd = new TimeSpan(16, 40, 00);
 
             // Act:
-            stamp.SetEnd(newEnd);
+            tm.SetEnd(stamp, newEnd);
 
             // Assert:
             Assert.AreEqual(newEnd, stamp.End);
@@ -129,16 +138,17 @@ namespace TimeStamp.Tests
         [TestMethod]
         public void TestSetEndEarlierOnOpenEndStampSetsActivityEndEarlierAndCutsOffActivity()
         {
+            // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
 
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Support", Begin = stamp.Begin, End = new TimeSpan(16, 40, 00) });
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Development", Begin = new TimeSpan(16, 40, 00), End = null });
 
-            // Arrange:
             var newEnd = new TimeSpan(16, 30, 00);
 
             // Act:
-            stamp.SetEnd(newEnd);
+            tm.SetEnd(stamp, newEnd);
 
             // Assert:
             Assert.AreEqual(newEnd, stamp.End);
@@ -149,16 +159,17 @@ namespace TimeStamp.Tests
         [TestMethod]
         public void TestSetEndEarlierOnStampSetsActivityEndEarlierAndCutsOffActivity()
         {
+            // Arrange:
+            var tm = GetManager();
             var stamp = GetStamp();
 
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Support", Begin = stamp.Begin, End = new TimeSpan(16, 40, 00) });
             stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "Product Development", Begin = new TimeSpan(16, 40, 00), End = stamp.End });
 
-            // Arrange:
             var newEnd = new TimeSpan(16, 30, 00);
 
             // Act:
-            stamp.SetEnd(newEnd);
+            tm.SetEnd(stamp, newEnd);
 
             // Assert:
             Assert.AreEqual(newEnd, stamp.End);
@@ -170,13 +181,14 @@ namespace TimeStamp.Tests
         public void TestSetEndLaterOnStampSetsActivityEndLater()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetStamp();
             AddSingleActivity(stamp);
 
             var newEnd = new TimeSpan(17, 20, 00);
 
             // Act:
-            stamp.SetEnd(newEnd);
+            tm.SetEnd(stamp, newEnd);
 
             // Assert:
             Assert.AreEqual(newEnd, stamp.End);
@@ -190,15 +202,16 @@ namespace TimeStamp.Tests
         public void TestSetPauseOnStampSetsSingleActivityEnd()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetStamp();
             AddSingleActivity(stamp);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, stamp.ActivityRecords[0].Total);
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, tm.Total(stamp.ActivityRecords[0]));
 
             var newPause = new TimeSpan(00, 10, 00);
 
             // Act: Set Pause from zero to actual value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect activity ends earlier
             Assert.AreEqual(newPause, stamp.Pause);
@@ -206,14 +219,14 @@ namespace TimeStamp.Tests
 
             Assert.AreEqual(stamp.End - newPause, stamp.ActivityRecords[0].End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, stamp.ActivityRecords[0].Total);
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, tm.Total(stamp.ActivityRecords[0]));
 
 
             // Arrange:
             newPause = new TimeSpan(00, 00, 00);
 
             // Act: Set Pause from actual value to shorter value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect activity ends later
             Assert.AreEqual(newPause, stamp.Pause);
@@ -221,20 +234,21 @@ namespace TimeStamp.Tests
 
             Assert.AreEqual(stamp.End, stamp.ActivityRecords[0].End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, stamp.ActivityRecords[0].Total);
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, tm.Total(stamp.ActivityRecords[0]));
         }
 
         [TestMethod]
         public void TestSetPauseOnOpenEndStampSetsSingleActivityBegin()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
             AddSingleActivity(stamp);
 
             var newPause = new TimeSpan(00, 10, 00);
 
             // Act: Set Pause from zero to actual value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect activity begins later
             Assert.AreEqual(newPause, stamp.Pause);
@@ -247,7 +261,7 @@ namespace TimeStamp.Tests
             newPause = new TimeSpan(00, 00, 00);
 
             // Act: Set Pause from actual value to zero
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect activity begins earlier
             Assert.AreEqual(newPause, stamp.Pause);
@@ -260,6 +274,7 @@ namespace TimeStamp.Tests
         public void TestSetPauseOnStampSetsInterruptedActivityEnd()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetStamp();
             stamp.Pause = new TimeSpan(00, 20, 00);
             var morning = new ActivityRecord() { Activity = "Product Support", Begin = stamp.Begin, End = new TimeSpan(12, 10, 00) };
@@ -267,12 +282,12 @@ namespace TimeStamp.Tests
             stamp.ActivityRecords.Add(morning);
             stamp.ActivityRecords.Add(afternoon);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
             var newPause = new TimeSpan(00, 65, 00);
 
             // Act: Set Pause from actual value to higher value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is longer
             Assert.AreEqual(newPause, stamp.Pause);
@@ -281,14 +296,14 @@ namespace TimeStamp.Tests
             Assert.AreEqual(newPause, afternoon.Begin.Value - morning.End.Value);
             Assert.AreEqual(new TimeSpan(11, 25, 00), morning.End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
 
             // Arrange:
             newPause = new TimeSpan(00, 00, 00);
 
             // Act: Set Pause from actual value to zero
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is zero
             Assert.AreEqual(newPause, stamp.Pause);
@@ -298,13 +313,14 @@ namespace TimeStamp.Tests
             Assert.AreEqual(morning.End.Value, afternoon.Begin.Value);
             Assert.AreEqual(new TimeSpan(12, 30, 00), morning.End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
         }
 
         [TestMethod]
         public void TestSetPauseOnStampSetsInterruptedActivityEndAndCutsOffActivity()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetStamp();
             stamp.Pause = new TimeSpan(00, 20, 00);
             var morning = new ActivityRecord() { Activity = "Paid Requirements", Begin = stamp.Begin, End = new TimeSpan(12, 00, 00) };
@@ -314,14 +330,14 @@ namespace TimeStamp.Tests
             stamp.ActivityRecords.Add(morning2);
             stamp.ActivityRecords.Add(afternoon);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
 
             // Arrange:
             var newPause = new TimeSpan(00, 05, 00);
 
             // Act: Set Pause from actual value to lower value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is zero
             Assert.AreEqual(newPause, stamp.Pause);
@@ -330,14 +346,14 @@ namespace TimeStamp.Tests
             Assert.AreEqual(newPause, afternoon.Begin.Value - morning2.End.Value);
             Assert.AreEqual(new TimeSpan(12, 25, 00), morning2.End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
 
             // Arrange:
             newPause = new TimeSpan(00, 65, 00);
 
             // Act: Set Pause from actual value to higher value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is longer, fully overlapping activity has been removed
             Assert.AreEqual(newPause, stamp.Pause);
@@ -347,14 +363,14 @@ namespace TimeStamp.Tests
             Assert.AreEqual(newPause, afternoon.Begin.Value - morning.End.Value);
             Assert.AreEqual(new TimeSpan(11, 25, 00), morning.End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
 
             // Arrange:
             newPause = new TimeSpan(00, 00, 00);
 
             // Act: Set Pause from actual value to zero
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is zero
             Assert.AreEqual(newPause, stamp.Pause);
@@ -364,14 +380,14 @@ namespace TimeStamp.Tests
             Assert.AreEqual(morning.End.Value, afternoon.Begin.Value);
             Assert.AreEqual(new TimeSpan(12, 30, 00), morning.End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
 
             // Arrange:
             newPause = new TimeSpan(00, 10, 00);
 
             // Act: Set Pause from zero to actual value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect last activity to end earlier (because the interruption gap is closed from previous pause == 0, and therefore will not be found any more)
             Assert.AreEqual(newPause, stamp.Pause);
@@ -380,7 +396,7 @@ namespace TimeStamp.Tests
             Assert.AreEqual(morning.End.Value, afternoon.Begin.Value);
             Assert.AreEqual(stamp.End - stamp.Pause, afternoon.End.Value);
 
-            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => a.Total.TotalMinutes)));
+            Assert.AreEqual((stamp.End - stamp.Begin) - stamp.Pause, TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => tm.Total(a).TotalMinutes)));
 
 
         }
@@ -389,6 +405,7 @@ namespace TimeStamp.Tests
         public void TestSetPauseOnOpenEndStampSetsInterruptedActivityEndAndCutsOffActivity()
         {
             // Arrange:
+            var tm = GetManager();
             var stamp = GetOpenEndStamp();
             stamp.Pause = new TimeSpan(00, 20, 00);
             var morning0 = new ActivityRecord() { Activity = "Product Support", Begin = stamp.Begin, End = new TimeSpan(09, 40, 00) };
@@ -406,7 +423,7 @@ namespace TimeStamp.Tests
             var newPause = new TimeSpan(00, 05, 00);
 
             // Act: Set Pause from actual value to lower value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is zero
             Assert.AreEqual(newPause, stamp.Pause);
@@ -420,7 +437,7 @@ namespace TimeStamp.Tests
             newPause = new TimeSpan(00, 65, 00);
 
             // Act: Set Pause from actual value to higher value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is longer, fully overlapping activity has been removed
             Assert.AreEqual(newPause, stamp.Pause);
@@ -435,7 +452,7 @@ namespace TimeStamp.Tests
             newPause = new TimeSpan(00, 00, 00);
 
             // Act: Set Pause from actual value to zero
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect interruption is zero
             Assert.AreEqual(newPause, stamp.Pause);
@@ -451,7 +468,7 @@ namespace TimeStamp.Tests
             newPause = new TimeSpan(00, 10, 00);
 
             // Act: Set Pause from zero to actual value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect first activity to start later (because the interruption gap is closed from previous pause == 0, and therefore will not be found any more, plus the open end prevents editing the last end)
             Assert.AreEqual(newPause, stamp.Pause);
@@ -464,7 +481,7 @@ namespace TimeStamp.Tests
             newPause = new TimeSpan(00, 60, 00);
 
             // Act: Set Pause to higher value
-            stamp.SetPause(newPause);
+            tm.SetPause(stamp, newPause);
 
             // Assert: expect first activity be removed and the next activity to start later
             Assert.AreEqual(newPause, stamp.Pause);

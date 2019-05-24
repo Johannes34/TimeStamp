@@ -12,10 +12,13 @@ namespace TimeStamp
 {
     public partial class ManageActivities : Form
     {
-        public ManageActivities()
+        public ManageActivities(TimeManager manager)
         {
+            m_settings = manager.Settings;
             InitializeComponent();
         }
+
+        private TimeSettings m_settings;
 
         private void ManageActivities_Load(object sender, EventArgs e)
         {
@@ -26,9 +29,9 @@ namespace TimeStamp
         {
             grdActivities.Rows.Clear();
 
-            foreach (var activity in Form1.TrackedActivities)
+            foreach (var activity in m_settings.TrackedActivities)
             {
-                int index = grdActivities.Rows.Add(activity, activity == Form1.AlwaysStartNewDayWithActivity, "");
+                int index = grdActivities.Rows.Add(activity, activity == m_settings.AlwaysStartNewDayWithActivity, "");
                 grdActivities.Rows[index].Tag = activity;
 
                 var button = grdActivities.Rows[index].Cells[2] as DataGridViewButtonCell;
@@ -77,17 +80,17 @@ namespace TimeStamp
                         affect.Activity = newName;
                     }
 
-                    int index = Form1.TrackedActivities.IndexOf(oldName);
+                    int index = m_settings.TrackedActivities.IndexOf(oldName);
                     if (index != -1)
-                        Form1.TrackedActivities.Remove(oldName); // remove existing
+                        m_settings.TrackedActivities.Remove(oldName); // remove existing
                     else
-                        index = Form1.TrackedActivities.Count; // add as new at the end of the list
+                        index = m_settings.TrackedActivities.Count; // add as new at the end of the list
 
-                    if (!Form1.TrackedActivities.Contains(newName))
-                        Form1.TrackedActivities.Insert(index, newName);
+                    if (!m_settings.TrackedActivities.Contains(newName))
+                        m_settings.TrackedActivities.Insert(index, newName);
 
-                    if (Form1.AlwaysStartNewDayWithActivity == oldName)
-                        Form1.AlwaysStartNewDayWithActivity = newName;
+                    if (m_settings.AlwaysStartNewDayWithActivity == oldName)
+                        m_settings.AlwaysStartNewDayWithActivity = newName;
 
                     // if new name already exists, those two activities have been merged -> show only one entry in grid
 
@@ -99,7 +102,7 @@ namespace TimeStamp
                         }
                     }
 
-                    if (Form1.AlwaysStartNewDayWithActivity == newName)
+                    if (m_settings.AlwaysStartNewDayWithActivity == newName)
                         currentRow.Cells[1].Value = true;
                 }
                 else
@@ -118,7 +121,7 @@ namespace TimeStamp
                 }
 
                 // set current value:
-                Form1.AlwaysStartNewDayWithActivity = (bool)currentRow.Cells[1].Value ? (string)currentRow.Cells[0].Value : null;
+                m_settings.AlwaysStartNewDayWithActivity = (bool)currentRow.Cells[1].Value ? (string)currentRow.Cells[0].Value : null;
             }
         }
 
@@ -140,10 +143,10 @@ namespace TimeStamp
                 if (affectedRecords.Count == 0)
                 {
                     // no worries, do it:
-                    Form1.TrackedActivities.Remove(currentActivity);
+                    m_settings.TrackedActivities.Remove(currentActivity);
 
-                    if (Form1.AlwaysStartNewDayWithActivity == currentActivity)
-                        Form1.AlwaysStartNewDayWithActivity = null;
+                    if (m_settings.AlwaysStartNewDayWithActivity == currentActivity)
+                        m_settings.AlwaysStartNewDayWithActivity = null;
                 }
                 else
                 {

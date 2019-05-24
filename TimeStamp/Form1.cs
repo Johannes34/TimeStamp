@@ -25,185 +25,6 @@ namespace TimeStamp
 {
     public partial class Form1 : Form
     {
-
-        #region Settings
-
-        private bool automaticPauseRecognition = true;
-        public static TimeSpan AutomaticPauseRecognitionStartTime = new TimeSpan(11, 30, 0);
-        public static TimeSpan AutomaticPauseRecognitionStopTime = new TimeSpan(13, 30, 0);
-        public readonly int AutomaticPauseRecognitionMinPauseTime = 12;
-
-        private static readonly Regex HHMM = new Regex("[0-9]{2}[:]{1}[0-9]{2}");
-        private readonly Regex DDMMYYYY = new Regex("[0-9]{2}[.]{1}[0-9]{2}[.]{1}[0-9]{4}");
-        private readonly Regex Integer = new Regex("[^0-9]+");
-
-        public static List<string> TrackedActivities { get; set; }
-
-        public static string AlwaysStartNewDayWithActivity { get; set; } = "Product Development";
-
-        private void LoadSettings()
-        {
-            automaticPauseRecognition = checkBox1.Checked = GetKey("AutomaticPauseRecognition", true);
-
-            StatisticType = (StatisticTypes)GetKey("StatisticsTypeIndex", 0);
-            StatisticRange = (StatisticRanges)GetKey("StatisticsTimeIndex", 0);
-
-            this.Width = GetKey("WindowWidth", this.Width);
-            this.Height = GetKey("WindowHeight", this.Height);
-
-            TrackedActivities = GetKey("TrackedActivities", String.Empty).Split(new[] { ";;;" }, StringSplitOptions.RemoveEmptyEntries).ToList();
-            if (!TrackedActivities.Any())
-            {
-                // default:
-                TrackedActivities = new List<string>()
-                {
-                    "Paid Requirements",
-                    "Product Development",
-                    "Product Support",
-                    "Meetings",
-                    "Documentation"
-                };
-            }
-
-            AlwaysStartNewDayWithActivity = GetKey("AlwaysStartNewDayWithActivity", (string)null);
-            if (AlwaysStartNewDayWithActivity == String.Empty)
-                AlwaysStartNewDayWithActivity = null;
-        }
-
-        private T GetKey<T>(string name, T defaultValue)
-        {
-            var key = Microsoft.Win32.Registry.GetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", name, defaultValue);
-            if (key != null && key is T)
-            {
-                return (T)key;
-            }
-            return defaultValue;
-        }
-
-        private void SaveSettings()
-        {
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AutomaticPauseRecognition", checkBox1.Checked);
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "StatisticsTypeIndex", cmbStatisticType.SelectedIndex);
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "StatisticsTimeIndex", cmbStatisticRange.SelectedIndex);
-
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "WindowWidth", this.Width);
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "WindowHeight", this.Height);
-
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "TrackedActivities", String.Join(";;;", TrackedActivities));
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AlwaysStartNewDayWithActivity", AlwaysStartNewDayWithActivity ?? String.Empty);
-        }
-
-        #endregion
-
-        // Data:
-
-        public List<Stamp> StampList;
-        public readonly string StampFilePath = ".\\StampFile.xml";
-        public readonly string LogFilePath = ".\\StampLog.txt";
-        public Stamp CurrentShown { get; set; }
-
-
-        // Today Data:
-
-        public Stamp Today { get; set; }
-
-        public void SetToday()
-        {
-            // this can happen when:
-            // starting the app (e.g. new day autostart, same day computer restart)
-            // resuming from sleep (e.g. new day resume, same day resume)
-
-            // find existing stamp for today:
-
-            var existing = StampList.SingleOrDefault(t => t.Day == DateTime.Today);
-
-            if (existing != null)
-            {
-                // TODO: (optionally) ask in a notification, whether have been working or not since last known stamp (default yes, if choosing no will automatically insert a pause)...
-
-                Today = CurrentShown = existing;
-                Today.End = TimeSpan.Zero;
-
-                // assuming the last activity is still valid, and the downtime is not considered a break:
-                // if there is no running activity, try to restore the last activity
-                if (TodayCurrentActivity == null)
-                {
-                    var openEnd = existing.ActivityRecords.FirstOrDefault(r => !r.End.HasValue);
-                    if (openEnd != null)
-                        TodayCurrentActivity = openEnd;
-                    else
-                    {
-                        var last = existing.GetLastActivity();
-                        existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
-                        StartNewActivity(last.Activity, null);
-                    }
-                    HighlightCurrentActivity();
-                }
-
-                PopupDialog.ShowCurrentlyTrackingActivity(this, TodayCurrentActivity.Activity);
-                CreateOrUpdateTrayIconContextMenu();
-                return;
-            }
-
-            // new day, new stamp:
-
-            TodayCurrentActivity = null;
-            Today = CurrentShown = new Stamp(DateTime.Today, GetNowTime());
-            StampList.Add(Today);
-
-            if (String.IsNullOrEmpty(AlwaysStartNewDayWithActivity))
-            {
-                // not specified ? -> keep tracking for latest activity...
-                foreach (var day in StampList.OrderByDescending(s => s.Day))
-                {
-                    if (!day.ActivityRecords.Any())
-                        continue;
-                    StartNewActivity(day.GetLastActivity().Activity, null);
-                    break;
-                }
-            }
-
-            if (TodayCurrentActivity == null) // immer noch null?
-                StartNewActivity(AlwaysStartNewDayWithActivity ?? TrackedActivities.ElementAt(1), null);
-
-            PopupDialog.ShowCurrentlyTrackingActivity(this, TodayCurrentActivity.Activity);
-        }
-
-        public ActivityRecord TodayCurrentActivity;
-
-        public void StartNewActivity(string name, string comment, bool autoMatchLastComment = false)
-        {
-            // finish current activity:
-            if (TodayCurrentActivity != null)
-            {
-                TodayCurrentActivity.End = GetNowTime();
-            }
-
-            // if no comment provided, automatically apply last comment:
-            if (String.IsNullOrEmpty(comment) && autoMatchLastComment)
-                comment = Today.ActivityRecords.Where(r => r.Activity == name && !String.IsNullOrEmpty(r.Comment)).LastOrDefault()?.Comment;
-
-            // start new activity:
-            TodayCurrentActivity = new ActivityRecord() { Activity = name, Begin = GetNowTime(), Comment = comment };
-            Today.ActivityRecords.Add(TodayCurrentActivity);
-
-            HighlightCurrentActivity();
-            CreateOrUpdateTrayIconContextMenu();
-        }
-
-        public void FinishActivity()
-        {
-            if (TodayCurrentActivity != null)
-            {
-                TodayCurrentActivity.End = GetNowTime();
-                TodayCurrentActivity = null;
-            }
-
-            var unfinishedActivities = Today.ActivityRecords.Where(r => !r.End.HasValue);
-            if (unfinishedActivities.Count() > 0)
-                throw new ArgumentOutOfRangeException($"There are {unfinishedActivities.Count()} simultaneously running activies: {String.Join(", ", unfinishedActivities.Select(a => a.Activity))}");
-        }
-
         // TODO:
 
         // LOW PRIO:
@@ -213,10 +34,20 @@ namespace TimeStamp
         //           -> this is actually identical to lock/unlock, as the default action probably shouldnt be 'do nothing' anyway... (also, the event does not fire reliably...)
         //      e.g. upon certain app start / changes, 
         //      e.g. PKI card inserted / removed, https://cgeers.wordpress.com/2008/02/03/monitoring-a-smartcard-reader/ or http://forums.codeguru.com/showthread.php?510947-How-to-detect-smart-card-reader-insertion
+        //      e.g. wifi network changed,
         //      etc...?
 
+        public TimeSettings Settings { get; private set; }
+        public TimeManager Manager { get; private set; }
 
-        #region Loads
+
+        public List<Stamp> StampList => Manager.StampList;
+        public Stamp CurrentShown => Manager.CurrentShown;
+        public Stamp Today => Manager.Today;
+        public ActivityRecord TodayCurrentActivity => Manager.TodayCurrentActivity;
+        public string FormatTimeSpan(TimeSpan tb) => Manager.FormatTimeSpan(tb);
+
+        // High Level Events:
 
         public Form1()
         {
@@ -224,66 +55,20 @@ namespace TimeStamp
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
-                Console.WriteLine(e.ExceptionObject);
+                Log.Add("Unhandled Exception: " + (e.ExceptionObject is Exception ? getFullExceptionMessage(e.ExceptionObject as Exception) : e.ExceptionObject.ToString()));
             };
 
-            LoadSettings();
-            try
-            {
-                FileStream fs = new FileStream(StampFilePath, FileMode.Open);
-                StampList = LoadStampListXml(XElement.Load(fs));
-                fs.Close();
-            }
-            catch (FileNotFoundException)
-            {
-                StampList = new List<Stamp>();
-            }
-            catch (Exception e)
-            {
-                MessageBox.Show(getFullExceptionMessage(e));
-            }
+            Settings = new TimeSettings();
+            Settings.LoadSettings();
+
+            Manager = new TimeManager(Settings);
+
+            // needs to be called after 'Manager' has been set, and before Manager.Initialize():
+            PopupDialog.Initialize(this);
 
             try
             {
-                foreach (var Stamp in StampList.ToArray())
-                    if (Stamp == null)
-                        StampList.Remove(Stamp);
-
-                // set todays stamp:
-                var todayEntries = StampList.Where(t => t.Day == DateTime.Today);
-
-                if (todayEntries.Count() > 1)
-                    throw new IndexOutOfRangeException("Several Todays in StampList found!");
-
-                SetToday();
-
-                if (Today == null)
-                    throw new InvalidDataException("Today Stamp is null");
-
-                // initialize controls:
-                btnAddTimestamp.BringToFront();
-
-                btnDeleteStamp.Click += new EventHandler(btnDeleteStamp_Click);
-                btnTakeDayOff.Click += new EventHandler(btnTakeDayOff_Click);
-                StampCalendar.DateChanged += StampCalendar_DateChanged;
-
-                foreach (var statType in Enum.GetNames(typeof(StatisticTypes)))
-                    cmbStatisticType.Items.Add(statType);
-
-                foreach (var statRange in Enum.GetNames(typeof(StatisticRanges)))
-                    cmbStatisticRange.Items.Add(statRange);
-
-                cmbStatisticType.SelectedIndexChanged += new EventHandler(comboBox1_SelectedIndexChanged);
-                cmbStatisticRange.SelectedIndexChanged += new EventHandler(comboBox2_SelectedIndexChanged);
-
-                lblTotalBalance.MaximumSize = groupBox1.Size;
-                refreshControls();
-
-                pauseSpanRecognizer = new Timer() { Interval = 5000, Enabled = true };
-                pauseSpanRecognizer.Tick += new EventHandler(middaySpan_Tick);
-                checkBox1.Text = "Automatic Pause Recognition ( >" + AutomaticPauseRecognitionMinPauseTime + " mins AFK between "
-                    + AutomaticPauseRecognitionStartTime.Hours + ":" + AutomaticPauseRecognitionStartTime.Minutes + "-"
-                    + AutomaticPauseRecognitionStopTime.Hours + ":" + AutomaticPauseRecognitionStopTime.Minutes + ")";
+                Manager.Initialize();
             }
             catch (Exception e)
             {
@@ -291,8 +76,51 @@ namespace TimeStamp
                 Application.Exit();
             }
 
-            cmbStatisticType.SelectedIndex = (int)StatisticType;
-            cmbStatisticRange.SelectedIndex = (int)StatisticRange;
+            Manager.CurrentActivityUpdated += () =>
+            {
+                // refresh grid to highlight the current activity with green background:
+                HighlightCurrentActivity();
+                // refresh context menu on tray icon:
+                CreateOrUpdateTrayIconContextMenu();
+            };
+
+
+            // initialize controls:
+
+
+            btnAddTimestamp.BringToFront();
+
+            btnDeleteStamp.Click += new EventHandler(btnDeleteStamp_Click);
+            btnTakeDayOff.Click += new EventHandler(btnTakeDayOff_Click);
+            StampCalendar.DateChanged += StampCalendar_DateChanged;
+
+            foreach (var statType in Enum.GetNames(typeof(TimeSettings.StatisticTypes)))
+                cmbStatisticType.Items.Add(statType);
+
+            foreach (var statRange in Enum.GetNames(typeof(TimeSettings.StatisticRanges)))
+                cmbStatisticRange.Items.Add(statRange);
+
+            cmbStatisticType.SelectedIndexChanged += new EventHandler(comboBox1_SelectedIndexChanged);
+            cmbStatisticRange.SelectedIndexChanged += new EventHandler(comboBox2_SelectedIndexChanged);
+
+            lblTotalBalance.MaximumSize = groupBox1.Size;
+            refreshControls();
+
+            pauseSpanRecognizer = new Timer() { Interval = 5000, Enabled = true };
+            pauseSpanRecognizer.Tick += new EventHandler(middaySpan_Tick);
+            checkBox1.Text = "Automatic Pause Recognition ( >" + Settings.AutomaticPauseRecognitionMinPauseTime + " mins AFK between "
+                + Settings.AutomaticPauseRecognitionStartTime.Hours + ":" + Settings.AutomaticPauseRecognitionStartTime.Minutes + "-"
+                + Settings.AutomaticPauseRecognitionStopTime.Hours + ":" + Settings.AutomaticPauseRecognitionStopTime.Minutes + ")";
+
+            // data bind control values to settings:
+
+            checkBox1.DataBindings.Add(new Binding(nameof(CheckBox.Checked), Settings, nameof(Settings.AutomaticPauseRecognition)));
+            cmbStatisticType.DataBindings.Add(new Binding(nameof(ComboBox.SelectedIndex), Settings, nameof(Settings.StatisticType)));
+            cmbStatisticRange.DataBindings.Add(new Binding(nameof(ComboBox.SelectedIndex), Settings, nameof(Settings.StatisticRange)));
+            this.DataBindings.Add(new Binding(nameof(Form.Width), Settings, nameof(Settings.WindowWidth)));
+            this.DataBindings.Add(new Binding(nameof(Form.Height), Settings, nameof(Settings.WindowHeight)));
+
+
 
             // enable events for system sleep/standby/resume and OS log on/off:
             //SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
@@ -304,9 +132,9 @@ namespace TimeStamp
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
-            SaveSettings();
+            Settings.SaveSettings();
 
-            SetTodaysEndAndSaveXml();
+            Manager.SetTodaysEndAndSaveXml();
 
             this.notifyIcon1.Visible = false;
         }
@@ -332,6 +160,8 @@ namespace TimeStamp
 
         //            ResumeStamping();
 
+        //            refreshControls();
+
         //            break;
 
         //        case PowerModes.Suspend:
@@ -350,75 +180,27 @@ namespace TimeStamp
             {
                 case SessionSwitchReason.SessionUnlock:
                     // Back from lock/standby
-                    Log("System Unlocked...");
+                    Log.Add("System Unlocked...");
 
-                    ResumeStamping();
+                    Manager.ResumeStamping();
+
+                    refreshControls();
 
                     break;
 
                 case SessionSwitchReason.SessionLock:
                     // Going into lock/standby screen
-                    Log("System Locked...");
+                    Log.Add("System Locked...");
 
-                    SuspendStamping();
+                    Manager.SuspendStamping();
 
                     break;
             }
         }
 
-        private void ResumeStamping()
-        {
-            // assuming here that 
-            if (TodayCurrentActivity != null)
-                throw new NotSupportedException($"TodayCurrentActivity is not null after resume: {TodayCurrentActivity.Activity}, started: {TodayCurrentActivity.Begin}");
 
-            SetToday();
+        // Control Handling:
 
-            refreshControls();
-        }
-
-        private void SuspendStamping()
-        {
-            SetTodaysEndAndSaveXml();
-        }
-
-        private void SetTodaysEndAndSaveXml()
-        {
-            // update end time:
-            if (Today.Begin.TotalMinutes != 0 && Today.End.TotalMinutes < DateTime.Now.TimeOfDay.TotalMinutes)
-                Today.End = GetNowTime();
-
-            FinishActivity();
-
-            FileStream fs;
-            if (!File.Exists(StampFilePath))
-                fs = new FileStream(StampFilePath, FileMode.CreateNew);
-            else
-                fs = new FileStream(StampFilePath, FileMode.Truncate);
-
-            bool success = false;
-            while (!success)
-            {
-                try
-                {
-                    GetStampListXml().Save(fs);
-                    //xml.Serialize(fs, StampList);
-                    fs.Close();
-                    success = true;
-                }
-                catch
-                { }
-            }
-        }
-
-        private void Log(string line)
-        {
-            File.AppendAllLines(LogFilePath, new[] { DateTime.Now.ToShortDateString() + " " + DateTime.Now.ToShortTimeString() + " " + line });
-        }
-
-        #endregion
-
-        #region Controls
         private void refreshControls()
         {
             RefreshStampTextBoxes();
@@ -429,7 +211,7 @@ namespace TimeStamp
             UpdateActivityList();
 
             RefreshDayBalanceLabel();
-            TimeSpan tb = calculateTotalBalance();
+            TimeSpan tb = Manager.CalculateTotalBalance();
             lblTotalBalance.Text = "Total Balance (w/o Today HH:MM): " + FormatTimeSpan(tb);
 
             StampCalendar.RemoveAllBoldedDates();
@@ -461,16 +243,16 @@ namespace TimeStamp
 
         private void RefreshDayBalanceLabel()
         {
-            string dayDesc = CurrentShown.Day == DateTime.Today ? "Today" : "Day";
+            string dayDesc = CurrentShown.Day == Manager.Time.Today ? "Today" : "Day";
 
             lblToday.Text = $"{dayDesc}: {CurrentShown.Day.ToShortDateString()}";
             lblTotal.Text = $"{dayDesc} Balance:";
-            txtCurrentShownTotal.Text = FormatTimeSpan(CurrentShown.DayBalance);
+            txtCurrentShownTotal.Text = FormatTimeSpan(Manager.DayBalance(CurrentShown));
         }
 
         private static bool TryParseHHMM(string text, out TimeSpan value)
         {
-            if (HHMM.IsMatch(text))
+            if (TimeSettings.HHMM.IsMatch(text))
             {
                 int hours = Convert.ToInt32(text.Substring(0, text.IndexOf(":")));
                 int minutes = Convert.ToInt32(text.Substring(text.IndexOf(":") + 1));
@@ -483,13 +265,13 @@ namespace TimeStamp
             return false;
         }
 
-        // Current Stamp Input Fields:
+        #region Current Day - Time Input Fields
 
         private void txtStart_TextChanged(object sender, EventArgs e)
         {
             if (TryParseHHMM(txtStart.Text, out TimeSpan value))
             {
-                CurrentShown.SetBegin(value);
+                Manager.SetBegin(CurrentShown, value);
                 UpdateActivityList();
                 RefreshDayBalanceLabel();
             }
@@ -498,9 +280,9 @@ namespace TimeStamp
         {
             if (TryParseHHMM(txtEnd.Text, out TimeSpan value))
             {
-                if (value >= GetNowTime() + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification))
+                if (value >= Manager.GetNowTime() + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification))
                     m_endingPopupShownLastTime = default(DateTime);
-                CurrentShown.SetEnd(value);
+                Manager.SetEnd(CurrentShown, value);
                 UpdateActivityList();
             }
             else if (String.IsNullOrEmpty(txtEnd.Text))
@@ -513,11 +295,11 @@ namespace TimeStamp
         }
         private void txtPause_TextChanged(object sender, EventArgs e)
         {
-            if (Integer.IsMatch(txtPause.Text))
+            if (TimeSettings.Integer.IsMatch(txtPause.Text))
                 return;
             if (!int.TryParse(txtPause.Text, out int pause))
                 return;
-            CurrentShown.SetPause(new TimeSpan(0, pause, 0));
+            Manager.SetPause(CurrentShown, TimeSpan.FromMinutes(pause));
             UpdateActivityList();
             RefreshDayBalanceLabel();
         }
@@ -529,13 +311,15 @@ namespace TimeStamp
         {
             if (String.IsNullOrEmpty(txtWorkingHours.Text))
                 return;
-            if (Integer.IsMatch(txtWorkingHours.Text))
+            if (TimeSettings.Integer.IsMatch(txtWorkingHours.Text))
                 return;
             CurrentShown.WorkingHours = Convert.ToInt32(txtWorkingHours.Text);
             RefreshDayBalanceLabel();
         }
 
-        // Current Stamp Activity Grid:
+        #endregion
+
+        #region Current Day - Activity Grid
 
         private void UpdateActivityList()
         {
@@ -553,7 +337,7 @@ namespace TimeStamp
                     FlatStyle = FlatStyle.Flat,
                     DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton,
                     Width = 66,
-                    DataSource = TrackedActivities.Concat(new[] { "[DELETE ENTRY]" }).ToArray()
+                    DataSource = Settings.TrackedActivities.Concat(new[] { "[DELETE ENTRY]" }).ToArray()
                 });
                 grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "Start", Width = 60 });
                 grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "End", Width = 76 });
@@ -574,7 +358,7 @@ namespace TimeStamp
                         FormatTimeSpan(activity.Begin.Value),
                         activity.End.HasValue ? FormatTimeSpan(activity.End.Value) : String.Empty,
                         previous != null && previous.End.HasValue && previous.End.Value < activity.Begin.Value,
-                        FormatTimeSpan(activity.Total),
+                        FormatTimeSpan(Manager.Total(activity)),
                         activity.Comment);
 
                     grdActivities.Rows[index].Tag = activity;
@@ -592,13 +376,13 @@ namespace TimeStamp
                 grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "Hours", ReadOnly = true, Width = 60 });
                 grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "Comment", Width = 76 });
 
-                grdActivities.Columns[0].Visible = CurrentShown.Day == DateTime.Today;
-                foreach (var activity in TrackedActivities)
+                grdActivities.Columns[0].Visible = CurrentShown.Day == Manager.Time.Today;
+                foreach (var activity in Settings.TrackedActivities)
                 {
                     if (CurrentShown.ActivityRecords.Any(r => r.Activity == activity))
                     {
                         var activityKind = CurrentShown.ActivityRecords.Where(r => r.Activity == activity);
-                        var totalActivityTime = TimeSpan.FromMinutes(activityKind.Sum(a => a.Total.TotalMinutes));
+                        var totalActivityTime = TimeSpan.FromMinutes(activityKind.Sum(a => Manager.Total(a).TotalMinutes));
                         int index = grdActivities.Rows.Add("", activity, FormatTimeSpan(totalActivityTime), activityKind.Last().Comment);
                         grdActivities.Rows[index].Tag = activity;
                     }
@@ -614,8 +398,8 @@ namespace TimeStamp
 
             HighlightCurrentActivity();
 
-            var stampTime = CurrentShown.DayTime;
-            var activityTime = TimeSpan.FromMinutes(CurrentShown.ActivityRecords.Sum(r => r.Total.TotalMinutes));
+            var stampTime = Manager.DayTime(CurrentShown);
+            var activityTime = TimeSpan.FromMinutes(CurrentShown.ActivityRecords.Sum(r => Manager.Total(r).TotalMinutes));
             bool isMatchingTimeStamps = stampTime == activityTime;
 
             if (isMatchingTimeStamps)
@@ -645,7 +429,7 @@ namespace TimeStamp
                 }
             }
 
-            if (CurrentShown != null && CurrentShown.Day == DateTime.Today)
+            if (CurrentShown != null && CurrentShown.Day == Manager.Time.Today)
             {
                 // highlight current:
                 DataGridViewRow currentRow;
@@ -676,7 +460,7 @@ namespace TimeStamp
                 if (senderGrid.Columns[e.ColumnIndex] is DataGridViewButtonColumn && e.RowIndex >= 0)
                 {
                     // start activity button clicked:
-                    StartNewActivity(grdActivities.Rows[e.RowIndex].Cells[1].Value as string, null);
+                    Manager.StartNewActivity(grdActivities.Rows[e.RowIndex].Cells[1].Value as string, null);
                     HighlightCurrentActivity();
                     foreach (DataGridViewCell cell in grdActivities.Rows[e.RowIndex].Cells)
                         cell.Style.ForeColor = grdActivities.DefaultCellStyle.ForeColor;
@@ -706,7 +490,7 @@ namespace TimeStamp
                 if (e.ColumnIndex == 0)
                 {
                     //change name (currently only allowed if activity exists)
-                    if (TrackedActivities.Any(a => a == text))
+                    if (Settings.TrackedActivities.Any(a => a == text))
                         currentActivity.Activity = text;
                     else if (text == "[DELETE ENTRY]")
                     {
@@ -747,7 +531,7 @@ namespace TimeStamp
                                 {
                                     previousActivity.End = value;
                                     // activity is hidden / negative after change -> remove activity
-                                    if (previousActivity.Total < TimeSpan.Zero)
+                                    if (Manager.Total(previousActivity) < TimeSpan.Zero)
                                     {
                                         CurrentShown.ActivityRecords.Remove(previousActivity);
                                         if (index == 0)
@@ -764,7 +548,7 @@ namespace TimeStamp
                         currentActivity.Begin = value;
 
                         // pause interruption gap(s) is/are changed -> also change day pause stamp
-                        CurrentShown.CalculatePauseFromActivities();
+                        Manager.CalculatePauseFromActivities(CurrentShown);
 
                         RefreshStampTextBoxes();
                         UpdateActivityList();
@@ -794,7 +578,7 @@ namespace TimeStamp
                                 {
                                     nextActivity.Begin = value;
                                     // activity is hidden / negative after change -> remove activity
-                                    if (nextActivity.Total < TimeSpan.Zero)
+                                    if (Manager.Total(nextActivity) < TimeSpan.Zero)
                                     {
                                         CurrentShown.ActivityRecords.Remove(nextActivity);
                                         if (index == grdActivities.Rows.Count - 2)
@@ -811,7 +595,7 @@ namespace TimeStamp
                         currentActivity.End = value;
 
                         // pause interruption gap(s) is/are changed -> also change day pause stamp
-                        CurrentShown.CalculatePauseFromActivities();
+                        Manager.CalculatePauseFromActivities(CurrentShown);
 
                         RefreshStampTextBoxes();
                         UpdateActivityList();
@@ -859,7 +643,9 @@ namespace TimeStamp
             }
         }
 
-        // Stamp Calendar:
+        #endregion
+
+        #region Calendar
 
         private void StampCalendar_DateChanged(object sender, DateRangeEventArgs e)
         {
@@ -874,7 +660,7 @@ namespace TimeStamp
             else
             {
                 btnAddTimestamp.Visible = false;
-                CurrentShown = selectedStamp;
+                Manager.CurrentShown = selectedStamp;
                 refreshControls();
             }
         }
@@ -883,38 +669,15 @@ namespace TimeStamp
         {
             btnAddTimestamp.Visible = false;
 
-            CurrentShown = new Stamp() { Day = StampCalendar.SelectionStart };
+            Manager.CurrentShown = new Stamp() { Day = StampCalendar.SelectionStart };
             StampList.Add(CurrentShown);
 
             refreshControls();
         }
 
-        // Chart:
+        #endregion
 
-        private StatisticTypes StatisticType = StatisticTypes.TimeInLieu;
-        private enum StatisticTypes
-        {
-            TimeInLieu,
-            Activities,
-            WeeklyActivities,
-        };
-
-        private StatisticRanges StatisticRange = StatisticRanges.Ever;
-        private enum StatisticRanges
-        {
-            Ever,
-
-            RecentYear,
-            RecentTerm,
-            RecentQuarter,
-            RecentMonth,
-            RecentWeek,
-
-            SelectedYear,
-            SelectedMonth,
-            SelectedWeek,
-            SelectedDay,
-        };
+        #region Chart
 
         private void UpdateStatistics()
         {
@@ -928,7 +691,7 @@ namespace TimeStamp
 
             var Statistics = new Series("Timestamp Statistics");
 
-            if (StatisticType == StatisticTypes.TimeInLieu)
+            if (Settings.StatisticType == TimeSettings.StatisticTypes.TimeInLieu)
             {
                 Statistics.ChartType = SeriesChartType.Column;
 
@@ -940,11 +703,11 @@ namespace TimeStamp
 
                 if (timeRangeStamps.Count > 1)
                 {
-                    double min = calculateTotalBalance(timeRangeStamps.First().Day).TotalHours;
+                    double min = Manager.CalculateTotalBalance(timeRangeStamps.First().Day).TotalHours;
                     double max = min;
                     foreach (var stamp in timeRangeStamps)
                     {
-                        var balance = calculateTotalBalance(stamp.Day).TotalHours;
+                        var balance = Manager.CalculateTotalBalance(stamp.Day).TotalHours;
                         Statistics.Points.AddXY(stamp.Day, balance);
                         if (balance < min)
                             min = balance;
@@ -955,7 +718,7 @@ namespace TimeStamp
                     string averageBegin = FormatTimeSpan(TimeSpan.FromHours(timeRangeStamps.Average(s => s.Begin.TotalHours)));
                     string averageEnd = FormatTimeSpan(TimeSpan.FromHours(timeRangeStamps.Average(s => s.End.TotalHours)));
                     string averagePause = timeRangeStamps.Average(s => s.Pause.TotalMinutes).ToString("0");
-                    string averageTotal = FormatTimeSpan(TimeSpan.FromHours(timeRangeStamps.Select(s => s.DayBalance.TotalHours).Average()));
+                    string averageTotal = FormatTimeSpan(TimeSpan.FromHours(timeRangeStamps.Select(s => Manager.DayBalance(s).TotalHours).Average()));
 
                     lblStatisticValues.Text = $"ø Begin: {averageBegin} | ø End: {averageEnd} | ø Pause: {averagePause} | ø Total: {averageTotal}";
 
@@ -965,7 +728,7 @@ namespace TimeStamp
                     chart1.ChartAreas.First().AxisY.RoundAxisValues();
                 }
             }
-            else if (StatisticType == StatisticTypes.Activities)
+            else if (Settings.StatisticType == TimeSettings.StatisticTypes.Activities)
             {
                 Statistics.ChartType = SeriesChartType.Pie;
 
@@ -975,7 +738,7 @@ namespace TimeStamp
 
                 var allActivities = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords);
 
-                var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => ar.Total.TotalHours));
+                var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => Manager.Total(ar).TotalHours));
 
                 var totalHours = totalHoursPerActivity.Values.Sum();
                 var percentPerActivity = totalHoursPerActivity.ToDictionary(a => a.Key, a => (a.Value / totalHours) * 100);
@@ -987,7 +750,7 @@ namespace TimeStamp
                     Statistics.Points[index].Label = $"{act.Key}: {rounded} %";
                 }
             }
-            else if (StatisticType == StatisticTypes.WeeklyActivities)
+            else if (Settings.StatisticType == TimeSettings.StatisticTypes.WeeklyActivities)
             {
                 var allStamps = GetTimeStampsInRange(true).Where(s => s.ActivityRecords.Any());
                 var timeRangeStampsPerWeek = allStamps.GroupBy(s => GetWeekOfYearISO8601(s.Day)); // daily: (s => s.Day.Day + "." + s.Day.Month);
@@ -1016,7 +779,7 @@ namespace TimeStamp
                     {
                         var allActivities = week.SelectMany(s => s.ActivityRecords);
 
-                        var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => ar.Total.TotalHours));
+                        var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => Manager.Total(ar).TotalHours));
 
                         var totalHours = totalHoursPerActivity.Values.Sum();
                         var percentPerActivity = totalHoursPerActivity.ToDictionary(a => a.Key, a => (a.Value / totalHours) * 100);
@@ -1048,62 +811,64 @@ namespace TimeStamp
             // Select time stamps according to user selection:
             TimeSpan sinceAgo;
 
-            switch (StatisticRange)
+            switch (Settings.StatisticRange)
             {
                 //case StatisticRanges.CurrentMonth:
-                //    timeRangeStamps.AddRange(StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == StampCalendar.SelectionStart.Year && s.Day.Month == StampCalendar.SelectionStart.Month && (includeToday || s.Day != DateTime.Today)));
+                //    timeRangeStamps.AddRange(StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == StampCalendar.SelectionStart.Year && s.Day.Month == StampCalendar.SelectionStart.Month && (includeToday || s.Day != Manager.Time.Today)));
                 //    break;
                 //case StatisticRanges.CurrentYear:
-                //    timeRangeStamps.AddRange(StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == StampCalendar.SelectionStart.Year && (includeToday || s.Day != DateTime.Today)));
+                //    timeRangeStamps.AddRange(StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == StampCalendar.SelectionStart.Year && (includeToday || s.Day != Manager.Time.Today)));
                 //    break;
-                case StatisticRanges.Ever:
-                    return StampList.OrderBy(s => s.Day).Where(s => (includeToday || s.Day != DateTime.Today)).ToList();
+                case TimeSettings.StatisticRanges.Ever:
+                    return StampList.OrderBy(s => s.Day).Where(s => (includeToday || s.Day != Manager.Time.Today)).ToList();
 
-                case StatisticRanges.RecentYear:
+                case TimeSettings.StatisticRanges.RecentYear:
                     sinceAgo = TimeSpan.FromDays(365);
                     break;
-                case StatisticRanges.RecentTerm:
+                case TimeSettings.StatisticRanges.RecentTerm:
                     sinceAgo = TimeSpan.FromDays(182);
                     break;
-                case StatisticRanges.RecentQuarter:
+                case TimeSettings.StatisticRanges.RecentQuarter:
                     sinceAgo = TimeSpan.FromDays(91);
                     break;
-                case StatisticRanges.RecentMonth:
+                case TimeSettings.StatisticRanges.RecentMonth:
                     sinceAgo = TimeSpan.FromDays(30);
                     break;
-                case StatisticRanges.RecentWeek:
+                case TimeSettings.StatisticRanges.RecentWeek:
                     sinceAgo = TimeSpan.FromDays(7);
                     break;
 
-                case StatisticRanges.SelectedYear:
+                case TimeSettings.StatisticRanges.SelectedYear:
                     return StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == CurrentShown.Day.Year).ToList();
-                case StatisticRanges.SelectedMonth:
+                case TimeSettings.StatisticRanges.SelectedMonth:
                     return StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == CurrentShown.Day.Year && s.Day.Month == CurrentShown.Day.Month).ToList();
-                case StatisticRanges.SelectedWeek:
+                case TimeSettings.StatisticRanges.SelectedWeek:
                     var targetWeek = GetWeekOfYearISO8601(CurrentShown.Day);
                     return StampList.OrderBy(s => s.Day).Where(s => s.Day.Year == CurrentShown.Day.Year && s.Day.Month == CurrentShown.Day.Month && GetWeekOfYearISO8601(s.Day) == targetWeek).ToList();
-                case StatisticRanges.SelectedDay:
+                case TimeSettings.StatisticRanges.SelectedDay:
                     return new List<Stamp>() { CurrentShown };
 
                 default:
                     throw new NotImplementedException();
             }
 
-            return StampList.OrderBy(s => s.Day).Where(s => s.Day > DateTime.Now.Subtract(sinceAgo)).ToList();
+            return StampList.OrderBy(s => s.Day).Where(s => s.Day > Manager.Time.Now.Subtract(sinceAgo)).ToList();
         }
 
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
-            StatisticType = (StatisticTypes)cmbStatisticType.SelectedIndex;
+            Settings.StatisticType = (TimeSettings.StatisticTypes)cmbStatisticType.SelectedIndex;
             UpdateStatistics();
         }
         private void comboBox2_SelectedIndexChanged(object sender, EventArgs e)
         {
-            StatisticRange = (StatisticRanges)cmbStatisticRange.SelectedIndex;
+            Settings.StatisticRange = (TimeSettings.StatisticRanges)cmbStatisticRange.SelectedIndex;
             UpdateStatistics();
         }
 
-        // Action Buttons:
+        #endregion
+
+        #region Action Buttons
 
         private void btnTakeDayOff_Click(object sender, EventArgs e)
         {
@@ -1113,27 +878,25 @@ namespace TimeStamp
                 if (answer == System.Windows.Forms.DialogResult.No)
                     return;
             }
-            CurrentShown.Begin = new TimeSpan(8, 0, 0);
-            CurrentShown.End = new TimeSpan(8, 0, 0);
-            CurrentShown.Pause = new TimeSpan(0);
-            CurrentShown.ActivityRecords.Clear();
+
+            Manager.TakeDayOff(CurrentShown);
+
             refreshControls();
         }
 
         private void btnDeleteStamp_Click(object sender, EventArgs e)
         {
-            if (CurrentShown != null)
+            if (Manager.DeleteStamp(CurrentShown))
             {
-                int index = StampList.IndexOf(CurrentShown);
-                StampList.Remove(CurrentShown);
-                CurrentShown = StampList.Count > index ? StampList.ElementAt(index) : StampList.ElementAt(index - 1);
                 refreshControls();
             }
         }
 
         private void btnExportExcelActivities_Click(object sender, EventArgs e)
         {
-            var years = GetExportableYears();
+            var exporter = new ExcelExport(this);
+
+            var years = exporter.GetExportableYears();
 
             var menu = new ContextMenuStrip();
 
@@ -1142,7 +905,7 @@ namespace TimeStamp
                 menu.Items.Add(new ToolStripMenuItem(year.ToString(), null, (ss, ee) =>
                 {
                     int exportYear = (int)(((ToolStripMenuItem)ss).Tag);
-                    CreateExcel(exportYear);
+                    exporter.CreateExcel(exportYear);
                 })
                 { Tag = year });
             }
@@ -1154,157 +917,15 @@ namespace TimeStamp
 
         private void btnManageActivities_Click(object sender, EventArgs e)
         {
-            var diag = new ManageActivities();
+            var diag = new ManageActivities(Manager);
             diag.ShowDialog(this);
 
             refreshControls();
         }
 
-        // Create Excel Export:
+        #endregion
 
-        private int[] GetExportableYears()
-        {
-            return StampList.Select(s => s.Day.Year).Distinct().OrderByDescending(y => y).ToArray();
-        }
-
-        private void CreateExcel(int year)
-        {
-            ExcelPackage excel = new ExcelPackage();
-
-            for (int i = 1; i <= 12; i++)
-            {
-                CreateExcelSheet(excel, year, i);
-
-                if (year == DateTime.Today.Year && i == DateTime.Today.Month)
-                    break;
-            }
-
-            var sfd = new SaveFileDialog();
-            sfd.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-            sfd.FileName = $"Zeiterfassung {year}.xlsx";
-            if (sfd.ShowDialog(this) == DialogResult.OK)
-            {
-                excel.SaveAs(new FileInfo(sfd.FileName));
-                Process.Start(sfd.FileName);
-            }
-        }
-
-        private void CreateExcelSheet(ExcelPackage excel, int year, int month)
-        {
-            var sheet = excel.Workbook.Worksheets.Add($"{new DateTime(year, month, 1).ToString("MMM")} {year}");
-
-            // write header texts:
-            sheet.Cells[1, 1].Value = "Tag";
-            sheet.Cells[1, 2].Value = "Projektst.";
-            int column = 3;
-            foreach (var activity in TrackedActivities)
-                sheet.Cells[1, column++].Value = activity;
-
-            int endColumn = column - 1;
-
-            // gray background:
-            sheet.Cells[1, 1, 1, endColumn].Style.Fill.PatternType = ExcelFillStyle.Solid;
-            sheet.Cells[1, 1, 1, endColumn].Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-
-            // properly sized:
-            sheet.Row(1).Height = 30;
-            for (int i = 1; i <= endColumn; i++)
-            {
-                sheet.Column(i).Width = 24;
-                // border:
-                sheet.Cells[1, i].Style.Border.BorderAround(ExcelBorderStyle.Medium, Color.Black);
-                // allow line breaks:
-                sheet.Cells[1, i].Style.WrapText = true;
-                // alignment:
-                sheet.Cells[1, i].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
-                sheet.Cells[1, i].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-            }
-
-            // write table body:
-            int row = 2;
-            var inclusiveMin = new DateTime(year, month, 1);
-            var exclusiveMax = new DateTime(month == 12 ? year + 1 : year, month == 12 ? 1 : month + 1, 1);
-            foreach (var stamp in StampList.Where(s => s.Day >= inclusiveMin && s.Day < exclusiveMax).OrderBy(s => s.Day).ToArray())
-            {
-                sheet.Cells[row, 1].Value = stamp.Day.ToString("dd.MM.yyyy");
-                sheet.Cells[row, 2].Formula = $"=SUM(C{row}:H{row})"; //GetTimeForExcelCell(stamp);
-
-                column = 3;
-                foreach (var activity in TrackedActivities)
-                    sheet.Cells[row, column++].Value = GetTimeForExcelCell(stamp, activity);
-
-                // formatting:
-                sheet.Cells[row, 2, row, endColumn].Style.Numberformat.Format = "0.00";
-
-                // border:
-                sheet.Cells[row, 2].Style.Border.Right.Style = ExcelBorderStyle.Medium;
-                sheet.Cells[row, 2].Style.Border.Right.Color.SetColor(Color.Black);
-
-                row++;
-            }
-
-            int summaryRow = 24;
-
-            // keep drawing border down to summary row:
-            for (int i = row; i < summaryRow; i++)
-            {
-                sheet.Cells[i, 2].Style.Border.Right.Style = ExcelBorderStyle.Medium;
-                sheet.Cells[i, 2].Style.Border.Right.Color.SetColor(Color.Black);
-            }
-
-            // write footer summary line formulas:
-            row = summaryRow;
-            sheet.Cells[row, 1].Formula = "=COUNTA(A2:A21)";
-            for (int i = 2; i <= endColumn; i++)
-                sheet.Cells[row, i].Formula = $"=SUM({ExcelAddress.GetAddressCol(i)}2:{ExcelAddress.GetAddressCol(i)}21)";
-
-            // formatting:
-            sheet.Cells[row, 2, row, endColumn].Style.Numberformat.Format = "0.00";
-
-            // gray background:
-            sheet.Cells[row, 1, row, endColumn].Style.Fill.PatternType = ExcelFillStyle.Solid;
-            sheet.Cells[row, 1, row, endColumn].Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-
-            // border:
-            for (int i = 1; i <= endColumn; i++)
-            {
-                sheet.Cells[row, i].Style.Border.BorderAround(ExcelBorderStyle.Medium, Color.Black);
-            }
-        }
-
-        private double? GetTimeForExcelCell(Stamp stamp, string activity = null)
-        {
-            IEnumerable<ActivityRecord> activities = stamp.ActivityRecords;
-
-            if (activity != null)
-                activities = activities.Where(r => r.Activity == activity);
-
-            var span = TimeSpan.FromMinutes(activities.Sum(r => r.Total.TotalMinutes));
-
-            if (span == TimeSpan.Zero)
-                return null; // String.Empty;
-
-            var hours = Math.Floor(span.TotalHours);
-            var fractional = span.TotalHours - hours;
-            // Minuten runden auf 
-            // 0.25 (viertelstunde): >= 7.5 && < 22.5
-            // 0.50 (halbestunde): >= 22.5 && < 
-            // 0.75 (dreiviertelstunde):
-            // 0.00 (ganze stunde):
-            if (fractional <= 0.125 || fractional > 0.875)
-                fractional = 0;
-            else if (fractional <= 0.375)
-                fractional = 0.25;
-            else if (fractional <= 0.625)
-                fractional = 0.50;
-            else if (fractional <= 0.875)
-                fractional = 0.75;
-
-            return hours + fractional;
-            //return span.ToString("hh\\:mm");
-        }
-
-        // TrayIcon:
+        #region Tray Icon
 
         private void CreateOrUpdateTrayIconContextMenu()
         {
@@ -1312,14 +933,14 @@ namespace TimeStamp
                 return;
 
             var menu = notifyIcon1.ContextMenuStrip ?? new ContextMenuStrip();
-            foreach (var activity in TrackedActivities)
+            foreach (var activity in Settings.TrackedActivities)
             {
                 string displayText;
                 Color foreColor;
                 if (Today.ActivityRecords.Any(r => r.Activity == activity))
                 {
                     var activityKind = CurrentShown.ActivityRecords.Where(r => r.Activity == activity);
-                    var totalActivityTime = TimeSpan.FromMinutes(activityKind.Sum(a => a.Total.TotalMinutes));
+                    var totalActivityTime = TimeSpan.FromMinutes(activityKind.Sum(a => Manager.Total(a).TotalMinutes));
 
                     displayText = FormatTimeSpan(totalActivityTime) + " " + activity;
                     foreColor = Color.Black;
@@ -1346,8 +967,8 @@ namespace TimeStamp
                     menu.Items.Add(new ToolStripMenuItem(displayText, isCurrentlyActive ? bmp : null, (ss, ee) =>
                     {
                         string newActivity = ((ToolStripMenuItem)ss).Tag as string;
-                        StartNewActivity(newActivity, null);
-                        PopupDialog.ShowCurrentlyTrackingActivity(this, newActivity);
+                        Manager.StartNewActivity(newActivity, null);
+                        PopupDialog.ShowCurrentlyTrackingActivity(newActivity);
                     })
                     { Tag = activity, ForeColor = foreColor });
                 }
@@ -1401,65 +1022,62 @@ namespace TimeStamp
         private MouseHookListener MouseHook;
         private TimeSpan lastMouseMove;
         private Timer pauseSpanRecognizer;
-        //private bool isWaiting = false;
 
         private void MouseHook_MouseMoveExt(object sender, MouseEventExtArgs e)
         {
-            if (lastMouseMove.TotalMinutes != 0 && DateTime.Now.TimeOfDay.Subtract(lastMouseMove).TotalMinutes >= AutomaticPauseRecognitionMinPauseTime)
+            if (lastMouseMove.TotalMinutes != 0 && Manager.Time.Now.TimeOfDay.Subtract(lastMouseMove).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
             {
-                Log("Mouse movement after pause: Today: " + Today + ", Activity: " + TodayCurrentActivity);
-                Today.Pause = GetNowTime() - GetTime(lastMouseMove);
+                Log.Add("Mouse movement after pause: Today: " + Today + ", Activity: " + TodayCurrentActivity);
+                Today.Pause = Manager.GetNowTime() - Manager.GetTime(lastMouseMove);
                 var current = TodayCurrentActivity;
-                TodayCurrentActivity.End = GetTime(lastMouseMove);
-                TodayCurrentActivity = null;
-                StartNewActivity(current.Activity, current.Comment + " Resuming after pause...");
+                TodayCurrentActivity.End = Manager.GetTime(lastMouseMove);
+                Manager.TodayCurrentActivity = null;
+                Manager.StartNewActivity(current.Activity, current.Comment + " Resuming after pause...");
 
                 if (MouseHook != null)
                     MouseHook.Enabled = false;
-                //isWaiting = false;
                 refreshControls();
                 new System.Threading.Tasks.Task(() =>
                 {
                     System.Threading.Thread.Sleep(10000);
-                    this.Invoke(new Action(() => { PopupDialog.ShowAfterPause(this, Today.Pause, current.Activity); }));
+                    this.Invoke(new Action(() => { PopupDialog.ShowAfterPause(Today.Pause, current.Activity); }));
                 }).Start();
                 return;
             }
-            lastMouseMove = DateTime.Now.TimeOfDay;
-            //isWaiting = true;
+            lastMouseMove = Manager.Time.Now.TimeOfDay;
         }
 
         private int m_minuteThresholdToShowNotification = 5;
         private DateTime m_endingPopupShownLastTime;
         private void middaySpan_Tick(object sender, EventArgs e)
         {
-            if ((m_endingPopupShownLastTime == default(DateTime) || m_endingPopupShownLastTime.Date != Today.Day.Date) && Today.Day.Date == DateTime.Today)
+            if ((m_endingPopupShownLastTime == default(DateTime) || m_endingPopupShownLastTime.Date != Today.Day.Date) && Today.Day.Date == Manager.Time.Today)
             {
-                if (Today.End == TimeSpan.Zero && Today.DayBalance >= TimeSpan.FromMinutes(-m_minuteThresholdToShowNotification))
+                if (Today.End == TimeSpan.Zero && Manager.DayBalance(Today) >= TimeSpan.FromMinutes(-m_minuteThresholdToShowNotification))
                 {
                     this.Invoke(new Action(() =>
                     {
-                        m_endingPopupShownLastTime = DateTime.Now;
-                        PopupDialog.Show8HrsIn5Minutes(this, DateTime.Today + Today.Begin + Today.Pause + TimeSpan.FromHours(Today.WorkingHours));
+                        m_endingPopupShownLastTime = Manager.Time.Now;
+                        PopupDialog.Show8HrsIn5Minutes(Manager.Time.Today + Today.Begin + Today.Pause + TimeSpan.FromHours(Today.WorkingHours));
                     }));
                 }
-                else if (Today.End != TimeSpan.Zero && DateTime.Now + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification) >= DateTime.Today + Today.End)
+                else if (Today.End != TimeSpan.Zero && Manager.Time.Now + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification) >= Manager.Time.Today + Today.End)
                 {
                     this.Invoke(new Action(() =>
                     {
-                        m_endingPopupShownLastTime = DateTime.Now;
-                        PopupDialog.ShowPlannedEndIn5Minutes(this, DateTime.Today + Today.End);
+                        m_endingPopupShownLastTime = Manager.Time.Now;
+                        PopupDialog.ShowPlannedEndIn5Minutes(Manager.Time.Today + Today.End);
                     }));
                 }
             }
 
 
-            if (!automaticPauseRecognition)
+            if (!Settings.AutomaticPauseRecognition)
                 return;
             if (Today.Pause != TimeSpan.Zero)
                 return;
 
-            if ((DateTime.Now.TimeOfDay >= AutomaticPauseRecognitionStartTime) && (DateTime.Now.TimeOfDay <= AutomaticPauseRecognitionStopTime))
+            if ((Manager.Time.Now.TimeOfDay >= Settings.AutomaticPauseRecognitionStartTime) && (Manager.Time.Now.TimeOfDay <= Settings.AutomaticPauseRecognitionStopTime))
             {
                 if (MouseHook == null)
                 {
@@ -1470,92 +1088,22 @@ namespace TimeStamp
                 if (MouseHook != null && !MouseHook.Enabled)
                 {
                     MouseHook.Enabled = true;
-                    //isWaiting = true;
-                    //MouseHook.MouseMoveExt -= MouseHook_MouseMoveExt;
-                    //MouseHook.Dispose();
-                    //MouseHook = null;
                 }
                 //actively looking for idle
             }
             else
             {
                 //if not waiting for user to come back from afk, stop looking for idle
-                if (/*isWaiting == false && */MouseHook != null && MouseHook.Enabled)
+                if (MouseHook != null && MouseHook.Enabled)
                 {
-                    //MouseHook.MouseMoveExt -= MouseHook_MouseMoveExt;
                     MouseHook.Enabled = false;
-                    //MouseHook.Dispose();
-                    //MouseHook = null;
                 }
             }
         }
 
-        private void checkBox1_CheckedChanged(object sender, EventArgs e)
-        {
-            if (checkBox1.Checked == true)
-            {
-                automaticPauseRecognition = true;
-                //pauseSpanRecognizer = new Timer() { Interval = 5000, Enabled = true };
-                //pauseSpanRecognizer.Tick += new EventHandler(middaySpan_Tick);
-            }
-            else
-            {
-                automaticPauseRecognition = false;
-                //if(pauseSpanRecognizer != null)
-                //    pauseSpanRecognizer.Enabled = false;
-            }
-        }
         #endregion
 
 
-        #region Calculations
-
-        private string AtLeastTwoDigits(int time)
-        {
-            var abs = Math.Abs(time);
-            return (abs < 10 ? "0" + abs : "" + abs);
-        }
-        private string FormatTimeSpan(TimeSpan span)
-        {
-            return (span < TimeSpan.Zero ? "-" : "")
-                + AtLeastTwoDigits((int)Math.Floor(Math.Abs(span.TotalHours)))
-                + ":" + AtLeastTwoDigits(span.Minutes);
-        }
-        private TimeSpan calculateTotalBalance()
-        {
-            TimeSpan totalBalance = new TimeSpan(0);
-            foreach (var stamp in StampList)
-            {
-                if (stamp.Day == DateTime.Today)
-                    continue;
-                totalBalance = totalBalance.Add(stamp.DayBalance);
-            }
-            return totalBalance;
-        }
-        private TimeSpan calculateTotalBalance(DateTime CalculateEndDate)
-        {
-            TimeSpan totalBalance = new TimeSpan(0);
-            var StampRange = StampList.Where(s => s.Day.Date <= CalculateEndDate);
-            foreach (var stamp in StampRange)
-            {
-                if (stamp.Day == DateTime.Today)
-                    continue;
-                totalBalance = totalBalance.Add(stamp.DayBalance);
-            }
-            return totalBalance;
-        }
-
-        public static TimeSpan GetNowTime()
-        {
-            return GetTime(DateTime.Now.TimeOfDay);
-        }
-
-        public static TimeSpan GetTime(TimeSpan accurate)
-        {
-            return new TimeSpan(accurate.Hours, accurate.Minutes, 0);
-        }
-
-        #endregion
 
         #region Misc
 
@@ -1676,105 +1224,6 @@ namespace TimeStamp
         //}
 
         //#endregion
-
-        #region XML-IO
-
-        private XElement GetStampListXml()
-        {
-            var rootXml = new XElement("ArrayOfStamp");
-
-            foreach (var stamp in StampList)
-            {
-                var stampXml = new XElement("Stamp");
-
-                stampXml.Add(new XElement("day", stamp.Day));
-                stampXml.Add(new XElement("begin", SerializeHHMM(stamp.Begin)));
-                stampXml.Add(new XElement("pause", SerializeMM(stamp.Pause)));
-                stampXml.Add(new XElement("end", SerializeHHMM(stamp.End)));
-                if (!String.IsNullOrEmpty(stamp.Comment))
-                    stampXml.Add(new XElement("comment", stamp.Comment));
-                if (stamp.WorkingHours != Stamp.DefaultWorkingHours)
-                    stampXml.Add(new XElement("hours", stamp.WorkingHours));
-
-                if (stamp.ActivityRecords.Count > 0)
-                {
-                    var activityRoot = new XElement("Activities");
-                    stampXml.Add(activityRoot);
-                    foreach (var activity in stamp.ActivityRecords)
-                    {
-                        activityRoot.Add(new XElement("Activity",
-                            new XAttribute("Name", activity.Activity ?? String.Empty),
-                            new XAttribute("Begin", SerializeHHMM(activity.Begin)),
-                            new XAttribute("End", SerializeHHMM(activity.End)),
-                            new XAttribute("Comment", activity.Comment ?? String.Empty)));
-                    }
-                }
-                rootXml.Add(stampXml);
-            }
-
-            return rootXml;
-        }
-
-        private string SerializeHHMM(TimeSpan? time)
-        {
-            if (!time.HasValue)
-                return String.Empty;
-            return time.Value.Hours + ":" + time.Value.Minutes;
-        }
-
-        private TimeSpan SerializeHHMM(string time)
-        {
-            return new TimeSpan(Convert.ToInt32(time.Substring(0, time.IndexOf(":"))), Convert.ToInt32(time.Substring(time.IndexOf(":") + 1)), 0);
-        }
-
-        private string SerializeMM(TimeSpan? time)
-        {
-            if (!time.HasValue)
-                return String.Empty;
-            return ((int)time.Value.TotalMinutes).ToString();
-        }
-
-        private TimeSpan SerializeMM(string time)
-        {
-            return new TimeSpan(0, Convert.ToInt32(time), 0);
-        }
-
-        private List<Stamp> LoadStampListXml(XElement xml)
-        {
-            List<Stamp> stamps = new List<Stamp>();
-            foreach (var stampXml in xml.Elements("Stamp"))
-            {
-                var stamp = new Stamp()
-                {
-                    Day = Convert.ToDateTime(stampXml.Element("day").Value),
-                    Begin = SerializeHHMM(stampXml.Element("begin").Value),
-                    End = SerializeHHMM(stampXml.Element("end").Value),
-                    Pause = SerializeMM(stampXml.Element("pause").Value),
-                    Comment = stampXml.Element("comment") != null ? stampXml.Element("comment").Value : String.Empty,
-                    WorkingHours = stampXml.Element("hours") != null ? Convert.ToInt32(stampXml.Element("hours").Value) : Stamp.DefaultWorkingHours
-                };
-
-                if (stampXml.Element("Activities") != null)
-                {
-                    stamp.ActivityRecords.Clear();
-                    foreach (var actxml in stampXml.Element("Activities").Elements("Activity"))
-                    {
-                        stamp.ActivityRecords.Add(new ActivityRecord()
-                        {
-                            Activity = actxml.Attribute("Name").Value,
-                            Begin = SerializeHHMM(actxml.Attribute("Begin").Value),
-                            End = SerializeHHMM(actxml.Attribute("End").Value),
-                            Comment = actxml.Attribute("Comment").Value
-                        });
-                    }
-                }
-
-                stamps.Add(stamp);
-            }
-            return stamps;
-        }
-
-        #endregion
 
     }
 }

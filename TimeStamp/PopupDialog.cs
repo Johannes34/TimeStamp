@@ -12,6 +12,16 @@ namespace TimeStamp
 {
     public partial class PopupDialog : Form
     {
+        public static void Initialize(Form1 owner)
+        {
+            DefaultOwner = owner;
+            Manager = owner.Manager;
+        }
+
+        public static IWin32Window DefaultOwner { get; set; }
+        public static TimeManager Manager { get; set; }
+
+
         public PopupDialog(string displayText, DateTime? showCountdownToDateTime, TimeSpan? showDuration, string suggestedActivity = null)
         {
             InitializeComponent();
@@ -27,51 +37,49 @@ namespace TimeStamp
                 btnChangeActivity.Visible = true;
                 btnChangeActivity.Click += (s, e) =>
                 {
-                    var frm1 = this.Owner as Form1;
-                    if (frm1 != null)
-                        frm1.StartNewActivity(suggestedActivity, null);
+                    Manager.StartNewActivity(suggestedActivity, null);
                     this.Close();
                 };
             }
         }
 
-        public static PopupDialog Show8HrsIn5Minutes(IWin32Window owner, DateTime endingTime)
+        public static PopupDialog Show8HrsIn5Minutes(DateTime endingTime)
         {
             string text;
-            if (endingTime < DateTime.Now)
+            if (endingTime < Manager.Time.Now)
                 text = "Today's total was 8hrs...";
             else
                 text = "Today's total is 8hrs...";
             var diag = new PopupDialog(text, endingTime, TimeSpan.FromSeconds(8));
-            diag.StartShowing(owner);
+            diag.StartShowing(DefaultOwner);
             return diag;
         }
 
-        public static PopupDialog ShowPlannedEndIn5Minutes(IWin32Window owner, DateTime endingTime)
+        public static PopupDialog ShowPlannedEndIn5Minutes(DateTime endingTime)
         {
             var diag = new PopupDialog("Remember today's end...", endingTime, TimeSpan.FromSeconds(8));
-            diag.StartShowing(owner);
+            diag.StartShowing(DefaultOwner);
             return diag;
         }
 
-        public static PopupDialog ShowAfterPause(IWin32Window owner, TimeSpan pauseDuration, string activity)
+        public static PopupDialog ShowAfterPause(TimeSpan pauseDuration, string activity)
         {
             var diag = new PopupDialog(String.Format("Today's pause was {0} minutes. You are continuing with '{1}'...", pauseDuration.TotalMinutes, activity), null, TimeSpan.FromSeconds(8));
-            diag.StartShowing(owner);
+            diag.StartShowing(DefaultOwner);
             return diag;
         }
 
-        public static PopupDialog ShowCurrentlyTrackingActivity(IWin32Window owner, string activity)
+        public static PopupDialog ShowCurrentlyTrackingActivity(string activity)
         {
             var diag = new PopupDialog(String.Format("Your currently tracking activity is: {0}", activity), null, TimeSpan.FromSeconds(8));
-            diag.StartShowing(owner);
+            diag.StartShowing(DefaultOwner);
             return diag;
         }
 
-        public static PopupDialog ShowCurrentlyTrackingActivityWithChangeToActivityButton(IWin32Window owner, string activity, string suggestedActivity)
+        public static PopupDialog ShowCurrentlyTrackingActivityWithChangeToActivityButton(string activity, string suggestedActivity)
         {
             var diag = new PopupDialog(String.Format("Your currently tracking activity is: {0}", activity), null, TimeSpan.FromSeconds(8), suggestedActivity);
-            diag.StartShowing(owner);
+            diag.StartShowing(DefaultOwner);
             return diag;
         }
 
@@ -116,7 +124,7 @@ namespace TimeStamp
         {
             if (DisplayCountdown.HasValue)
             {
-                var remaining = DisplayCountdown.Value - DateTime.Now;
+                var remaining = DisplayCountdown.Value - Manager.Time.Now;
                 if (remaining > TimeSpan.Zero)
                     return String.Format(@"... in {0:hh\:mm\:ss} minutes", remaining);
                 else if (remaining == TimeSpan.Zero)
@@ -160,12 +168,15 @@ namespace TimeStamp
 
         public void StartShowing(IWin32Window owner)
         {
+            if (Manager?.Settings != null && Manager.Settings.DisablePopupNotifications)
+                return;
+
             this.Opacity = 0;
             this.Location = new Point(Screen.PrimaryScreen.WorkingArea.Width - (this.Width + 40), Screen.PrimaryScreen.WorkingArea.Height - (this.Height + 40));
             base.Show(owner);
             System.Media.SystemSounds.Hand.Play();
 
-            m_openedTime = DateTime.Now;
+            m_openedTime = Manager.Time.Now;
             new Task(() =>
             {
                 while ((bool)this.Invoke(new Func<bool>(() => this.Opacity < 1)))
@@ -217,7 +228,7 @@ namespace TimeStamp
         {
             if (ShowDuration.HasValue)
             {
-                if (DateTime.Now > m_openedTime + ShowDuration.Value)
+                if (Manager.Time.Now > m_openedTime + ShowDuration.Value)
                 {
                     this.StartClosing();
                 }
