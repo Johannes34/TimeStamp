@@ -51,13 +51,23 @@ namespace TimeStamp
                 if (TodayCurrentActivity == null)
                 {
                     var openEnd = existing.ActivityRecords.FirstOrDefault(r => !r.End.HasValue);
-                    if (openEnd != null)
+                    if (openEnd != null) // this case should actually never happen?
                         TodayCurrentActivity = openEnd;
                     else
                     {
+                        // get lastest logged activity:
                         var last = existing.GetLastActivity();
-                        existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
-                        StartNewActivity(last.Activity, null);
+                        // if log off time since then was more than 7 minutes, create and start new activity record (better tracking):
+                        if (GetNowTime() - last.End.Value > TimeSpan.FromMinutes(7))
+                        {
+                            existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
+                            StartNewActivity(last.Activity, null);
+                        }
+                        // otherwise, just resume that activity:
+                        else
+                        {
+                            TodayCurrentActivity = last;
+                        }
                     }
                 }
 
