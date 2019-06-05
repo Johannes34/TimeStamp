@@ -13,5 +13,7 @@
 /TimeStamp.Tests/obj/Release
 /TimeStamp.Setup/Release
 /TimeStamp/obj
-/TimeStamp.Installer/bin/Release
+/TimeStamp.Installer/bin/Debug
 /TimeStamp.Installer/obj/Release
+/TimeStamp.Installer/obj/Debug
+/TimeStamp.Installer/bin/Release

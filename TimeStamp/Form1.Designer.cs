@@ -30,8 +30,8 @@
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.notifyIcon1 = new System.Windows.Forms.NotifyIcon(this.components);
             this.label1 = new System.Windows.Forms.Label();
             this.txtStart = new System.Windows.Forms.TextBox();
@@ -65,10 +65,9 @@
             this.StampCalendar = new System.Windows.Forms.MonthCalendar();
             this.btnDeleteStamp = new System.Windows.Forms.Button();
             this.btnTakeDayOff = new System.Windows.Forms.Button();
-            this.checkBox1 = new System.Windows.Forms.CheckBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
-            this.btnManageActivities = new System.Windows.Forms.Button();
+            this.btnSettings = new System.Windows.Forms.Button();
             this.btnExportExcelActivities = new System.Windows.Forms.Button();
             this.lblToday.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grdActivities)).BeginInit();
@@ -229,8 +228,8 @@
             this.grdActivities.AllowUserToDeleteRows = false;
             this.grdActivities.AllowUserToOrderColumns = true;
             this.grdActivities.AllowUserToResizeRows = false;
-            this.grdActivities.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.grdActivities.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.grdActivities.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.AllCells;
             this.grdActivities.BackgroundColor = System.Drawing.SystemColors.Control;
@@ -314,7 +313,7 @@
             // 
             // txtComment
             // 
-            this.txtComment.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
+            this.txtComment.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.txtComment.Location = new System.Drawing.Point(117, 119);
             this.txtComment.Name = "txtComment";
@@ -339,7 +338,7 @@
             // 
             this.groupBox1.Controls.Add(this.lblTotalBalance);
             this.groupBox1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox1.Location = new System.Drawing.Point(0, 506);
+            this.groupBox1.Location = new System.Drawing.Point(0, 480);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Size = new System.Drawing.Size(549, 56);
             this.groupBox1.TabIndex = 9;
@@ -364,7 +363,7 @@
             // 
             // lblStatisticValues
             // 
-            this.lblStatisticValues.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            this.lblStatisticValues.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
             this.lblStatisticValues.Location = new System.Drawing.Point(12, 190);
             this.lblStatisticValues.Name = "lblStatisticValues";
@@ -394,20 +393,20 @@
             // 
             // chart1
             // 
-            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea1.Name = "ChartArea1";
-            this.chart1.ChartAreas.Add(chartArea1);
+            chartArea2.Name = "ChartArea1";
+            this.chart1.ChartAreas.Add(chartArea2);
             this.chart1.Location = new System.Drawing.Point(224, 25);
             this.chart1.Name = "chart1";
             this.chart1.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.SeaGreen;
-            series1.ChartArea = "ChartArea1";
-            series1.CustomProperties = "EmptyPointValue=Zero";
-            series1.IsVisibleInLegend = false;
-            series1.IsXValueIndexed = true;
-            series1.Name = "S";
-            this.chart1.Series.Add(series1);
+            series2.ChartArea = "ChartArea1";
+            series2.CustomProperties = "EmptyPointValue=Zero";
+            series2.IsVisibleInLegend = false;
+            series2.IsXValueIndexed = true;
+            series2.Name = "S";
+            this.chart1.Series.Add(series2);
             this.chart1.Size = new System.Drawing.Size(319, 186);
             this.chart1.TabIndex = 33;
             this.chart1.Text = "chart1";
@@ -423,7 +422,7 @@
             // 
             // btnDeleteStamp
             // 
-            this.btnDeleteStamp.Location = new System.Drawing.Point(107, 56);
+            this.btnDeleteStamp.Location = new System.Drawing.Point(110, 27);
             this.btnDeleteStamp.Name = "btnDeleteStamp";
             this.btnDeleteStamp.Size = new System.Drawing.Size(95, 23);
             this.btnDeleteStamp.TabIndex = 30;
@@ -432,24 +431,12 @@
             // 
             // btnTakeDayOff
             // 
-            this.btnTakeDayOff.Location = new System.Drawing.Point(6, 56);
+            this.btnTakeDayOff.Location = new System.Drawing.Point(9, 27);
             this.btnTakeDayOff.Name = "btnTakeDayOff";
             this.btnTakeDayOff.Size = new System.Drawing.Size(95, 23);
             this.btnTakeDayOff.TabIndex = 31;
             this.btnTakeDayOff.Text = "Take Day Off";
             this.btnTakeDayOff.UseVisualStyleBackColor = true;
-            // 
-            // checkBox1
-            // 
-            this.checkBox1.Checked = true;
-            this.checkBox1.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBox1.Location = new System.Drawing.Point(9, 19);
-            this.checkBox1.MaximumSize = new System.Drawing.Size(220, 30);
-            this.checkBox1.Name = "checkBox1";
-            this.checkBox1.Size = new System.Drawing.Size(200, 30);
-            this.checkBox1.TabIndex = 32;
-            this.checkBox1.Text = "Automatic Pause Recognition ( >15 mins AFK between 11:30-13:30)";
-            this.checkBox1.UseVisualStyleBackColor = true;
             // 
             // groupBox2
             // 
@@ -468,35 +455,34 @@
             // 
             // groupBox3
             // 
-            this.groupBox3.Controls.Add(this.btnManageActivities);
+            this.groupBox3.Controls.Add(this.btnSettings);
             this.groupBox3.Controls.Add(this.btnExportExcelActivities);
-            this.groupBox3.Controls.Add(this.checkBox1);
             this.groupBox3.Controls.Add(this.btnTakeDayOff);
             this.groupBox3.Controls.Add(this.btnDeleteStamp);
             this.groupBox3.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.groupBox3.Location = new System.Drawing.Point(0, 418);
             this.groupBox3.Name = "groupBox3";
-            this.groupBox3.Size = new System.Drawing.Size(549, 88);
+            this.groupBox3.Size = new System.Drawing.Size(549, 62);
             this.groupBox3.TabIndex = 38;
             this.groupBox3.TabStop = false;
             this.groupBox3.Text = "Settings and Actions";
             // 
-            // btnManageActivities
+            // btnSettings
             // 
-            this.btnManageActivities.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnManageActivities.Location = new System.Drawing.Point(433, 56);
-            this.btnManageActivities.Name = "btnManageActivities";
-            this.btnManageActivities.Size = new System.Drawing.Size(110, 23);
-            this.btnManageActivities.TabIndex = 34;
-            this.btnManageActivities.Text = "Manage Activities...";
-            this.btnManageActivities.UseVisualStyleBackColor = true;
-            this.btnManageActivities.Click += new System.EventHandler(this.btnManageActivities_Click);
+            this.btnSettings.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnSettings.Location = new System.Drawing.Point(433, 27);
+            this.btnSettings.Name = "btnSettings";
+            this.btnSettings.Size = new System.Drawing.Size(110, 23);
+            this.btnSettings.TabIndex = 35;
+            this.btnSettings.Text = "Settings...";
+            this.btnSettings.UseVisualStyleBackColor = true;
+            this.btnSettings.Click += new System.EventHandler(this.btnSettings_Click);
             // 
             // btnExportExcelActivities
             // 
-            this.btnExportExcelActivities.Location = new System.Drawing.Point(208, 56);
+            this.btnExportExcelActivities.Location = new System.Drawing.Point(211, 27);
             this.btnExportExcelActivities.Name = "btnExportExcelActivities";
-            this.btnExportExcelActivities.Size = new System.Drawing.Size(128, 23);
+            this.btnExportExcelActivities.Size = new System.Drawing.Size(130, 23);
             this.btnExportExcelActivities.TabIndex = 33;
             this.btnExportExcelActivities.Text = "Activities to Excel     | ▼";
             this.btnExportExcelActivities.UseVisualStyleBackColor = true;
@@ -506,13 +492,13 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(549, 562);
+            this.ClientSize = new System.Drawing.Size(549, 536);
             this.Controls.Add(this.lblToday);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox3);
             this.Controls.Add(this.groupBox1);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.MinimumSize = new System.Drawing.Size(469, 600);
+            this.MinimumSize = new System.Drawing.Size(469, 575);
             this.Name = "Form1";
             this.Text = "TimeStamp";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
@@ -555,7 +541,6 @@
         public System.Windows.Forms.MonthCalendar StampCalendar;
         public System.Windows.Forms.Button btnDeleteStamp;
         public System.Windows.Forms.Button btnTakeDayOff;
-        public System.Windows.Forms.CheckBox checkBox1;
         private System.Windows.Forms.DataGridView grdActivities;
         private System.Windows.Forms.GroupBox groupBox2;
         private System.Windows.Forms.GroupBox groupBox3;
@@ -568,7 +553,7 @@
         public System.Windows.Forms.Button btnExportExcelActivities;
         private System.Windows.Forms.CheckBox cbActivityDetails;
         private System.Windows.Forms.Label lblActivityWarning;
-        public System.Windows.Forms.Button btnManageActivities;
+        private System.Windows.Forms.Button btnSettings;
     }
 }
 

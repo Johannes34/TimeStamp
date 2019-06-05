@@ -10,17 +10,14 @@ namespace TimeStamp
     [Serializable]
     public class Stamp
     {
-        public static int DefaultWorkingHours = 8;
-
-        public Stamp()
+        public Stamp(int workingHours)
         {
-            WorkingHours = DefaultWorkingHours;
+            WorkingHours = workingHours;
             ActivityRecords = new List<ActivityRecord>();
         }
 
-
-        public Stamp(DateTime day, TimeSpan begin)
-            : this()
+        public Stamp(DateTime day, TimeSpan begin, int workingHours)
+            : this(workingHours)
         {
             this.Day = day;
             this.Begin = begin;

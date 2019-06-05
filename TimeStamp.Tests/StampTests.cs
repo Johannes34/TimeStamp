@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +11,7 @@ namespace TimeStamp.Tests
     {
         private Stamp GetStamp(bool hasOpenEnd = false)
         {
-            var stamp = new Stamp();
+            var stamp = new Stamp(8);
             stamp.Day = new DateTime(2019, 05, 21);
             stamp.WorkingHours = 8;
 
@@ -491,5 +492,221 @@ namespace TimeStamp.Tests
             Assert.AreEqual(new TimeSpan(10, 17, 00), morning.Begin.Value);
 
         }
+
+
+
+
+        [TestMethod]
+        public void TestAutomaticPauseRecognition_InLockWhenLeavingMode()
+        {
+            var tm = TestAutomaticPauseRecognition(true, 22, 22);
+
+            Assert.AreEqual(TimeSpan.FromMinutes(17), tm.StampList.Single().Pause);
+
+            Assert.AreEqual(2, tm.StampList.Single().ActivityRecords.Count);
+
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).Begin);
+            Assert.AreEqual(new TimeSpan(12, 22, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(0).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(0).Activity);
+
+            Assert.AreEqual(new TimeSpan(12, 39, 00), tm.StampList.Single().ActivityRecords.ElementAt(1).Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(1).End);
+            Assert.AreEqual(" Resuming after pause...", tm.StampList.Single().ActivityRecords.ElementAt(1).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(1).Activity);
+
+            Assert.IsFalse(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+        }
+
+        [TestMethod]
+        public void TestAutomaticPauseRecognition_WithIdleBeforeLogOut_InLockWhenLeavingMode()
+        {
+            var tm = TestAutomaticPauseRecognition(true, 22, 25);
+
+            Assert.AreEqual(TimeSpan.FromMinutes(14), tm.StampList.Single().Pause);
+
+            Assert.AreEqual(2, tm.StampList.Single().ActivityRecords.Count);
+
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).Begin);
+            Assert.AreEqual(new TimeSpan(12, 25, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(0).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(0).Activity);
+
+            Assert.AreEqual(new TimeSpan(12, 39, 00), tm.StampList.Single().ActivityRecords.ElementAt(1).Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(1).End);
+            Assert.AreEqual(" Resuming after pause...", tm.StampList.Single().ActivityRecords.ElementAt(1).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(1).Activity);
+
+            Assert.IsFalse(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+        }
+
+        [TestMethod]
+        public void TestAutomaticPauseRecognition_WithMovementAfterLogOut_InLockWhenLeavingMode()
+        {
+            var tm = TestAutomaticPauseRecognition(true, 24, 21);
+
+            Assert.AreEqual(TimeSpan.FromMinutes(18), tm.StampList.Single().Pause);
+
+            Assert.AreEqual(2, tm.StampList.Single().ActivityRecords.Count);
+
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).Begin);
+            Assert.AreEqual(new TimeSpan(12, 21, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(0).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(0).Activity);
+
+            Assert.AreEqual(new TimeSpan(12, 39, 00), tm.StampList.Single().ActivityRecords.ElementAt(1).Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(1).End);
+            Assert.AreEqual(" Resuming after pause...", tm.StampList.Single().ActivityRecords.ElementAt(1).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(1).Activity);
+
+            Assert.IsFalse(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+        }
+
+        [TestMethod]
+        public void TestAutomaticPauseRecognition_NotLockWhenLeavingMode()
+        {
+            var tm = TestAutomaticPauseRecognition(false, 22, 22);
+
+            Assert.AreEqual(TimeSpan.FromMinutes(17), tm.StampList.Single().Pause);
+
+            Assert.AreEqual(2, tm.StampList.Single().ActivityRecords.Count);
+
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).Begin);
+            Assert.AreEqual(new TimeSpan(12, 22, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(0).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(0).Activity);
+
+            Assert.AreEqual(new TimeSpan(12, 39, 00), tm.StampList.Single().ActivityRecords.ElementAt(1).Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(1).End);
+            Assert.AreEqual(" Resuming after pause...", tm.StampList.Single().ActivityRecords.ElementAt(1).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(1).Activity);
+
+            Assert.IsFalse(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+        }
+
+        [TestMethod]
+        public void TestAutomaticPauseRecognition_WithIdleBeforeLogOut_NotLockWhenLeavingMode()
+        {
+            var tm = TestAutomaticPauseRecognition(false, 22, 25);
+
+            Assert.AreEqual(TimeSpan.FromMinutes(17), tm.StampList.Single().Pause);
+
+            Assert.AreEqual(2, tm.StampList.Single().ActivityRecords.Count);
+
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).Begin);
+            Assert.AreEqual(new TimeSpan(12, 22, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(0).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(0).Activity);
+
+            Assert.AreEqual(new TimeSpan(12, 39, 00), tm.StampList.Single().ActivityRecords.ElementAt(1).Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(1).End);
+            Assert.AreEqual(" Resuming after pause...", tm.StampList.Single().ActivityRecords.ElementAt(1).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(1).Activity);
+
+            Assert.IsFalse(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+        }
+
+        [TestMethod]
+        public void TestAutomaticPauseRecognition_WithMovementAfterLogOut_NotLockWhenLeavingMode()
+        {
+            var tm = TestAutomaticPauseRecognition(false, 24, 21);
+
+            Assert.AreEqual(TimeSpan.FromMinutes(15), tm.StampList.Single().Pause);
+
+            Assert.AreEqual(2, tm.StampList.Single().ActivityRecords.Count);
+
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).Begin);
+            Assert.AreEqual(new TimeSpan(12, 24, 00), tm.StampList.Single().ActivityRecords.ElementAt(0).End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(0).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(0).Activity);
+
+            Assert.AreEqual(new TimeSpan(12, 39, 00), tm.StampList.Single().ActivityRecords.ElementAt(1).Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.ElementAt(1).End);
+            Assert.AreEqual(" Resuming after pause...", tm.StampList.Single().ActivityRecords.ElementAt(1).Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.ElementAt(1).Activity);
+
+            Assert.IsFalse(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+        }
+
+        private TimeManager TestAutomaticPauseRecognition(bool lockWhenLeavingMode, int lastMouseMoveMinute, int logOffMinute)
+        {
+            var tm = new TimeManager(new TimeSettings()
+            {
+                AutomaticPauseRecognition = true,
+                AutomaticPauseRecognitionStartTime = new TimeSpan(11, 30, 00),
+                AutomaticPauseRecognitionStopTime = new TimeSpan(13, 00, 00),
+                AutomaticPauseRecognitionMinPauseTime = 10,
+                IsLockingComputerWhenLeaving = lockWhenLeavingMode,
+                DisablePopupNotifications = true,
+                IgnoreStampFile = true,
+            });
+
+            PopupDialog.Manager = tm;
+
+            var mockTime = new Mock<TimeProvider>();
+            mockTime.SetupGet(t => t.Today).Returns(new DateTime(2019, 05, 24));
+            mockTime.SetupGet(t => t.Now).Returns(new DateTime(2019, 05, 24, 12, 20, 00));
+
+            tm.Time = mockTime.Object;
+
+            tm.Initialize();
+
+            // assert initial state:
+            Assert.AreEqual(1, tm.StampList.Count);
+
+            Assert.AreEqual(new DateTime(2019, 05, 24), tm.StampList.Single().Day);
+            Assert.AreEqual(8, tm.StampList.Single().WorkingHours);
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().Begin);
+            Assert.AreEqual(TimeSpan.Zero, tm.StampList.Single().End);
+            Assert.AreEqual(TimeSpan.Zero, tm.StampList.Single().Pause);
+
+            Assert.AreEqual(1, tm.StampList.Single().ActivityRecords.Count);
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().ActivityRecords.Single().Begin);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.Single().End);
+            Assert.IsNull(tm.StampList.Single().ActivityRecords.Single().Comment);
+            Assert.AreEqual("Product Development", tm.StampList.Single().ActivityRecords.Single().Activity);
+
+            Assert.IsTrue(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+
+            // simulate last mouse moved:
+
+            tm.LastMouseMove = new TimeSpan(12, lastMouseMoveMinute, 00);
+            mockTime.SetupGet(t => t.Now).Returns(new DateTime(2019, 05, 24, 12, logOffMinute, 00));
+
+
+            Assert.IsTrue(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsFalse(tm.IsQualifiedPauseBreak);
+
+            // simulate sleep and time change:
+            tm.SuspendStamping();
+
+            mockTime.SetupGet(t => t.Now).Returns(new DateTime(2019, 05, 24, 12, 39, 00));
+
+            Assert.IsTrue(tm.IsInPauseTimeRecognitionMode);
+            Assert.IsTrue(tm.IsQualifiedPauseBreak);
+
+            // simulate resuming after pause:
+
+            tm.ResumeStamping();
+
+
+            // assert new state:
+            Assert.AreEqual(1, tm.StampList.Count);
+
+            Assert.AreEqual(new DateTime(2019, 05, 24), tm.StampList.Single().Day);
+            Assert.AreEqual(8, tm.StampList.Single().WorkingHours);
+            Assert.AreEqual(new TimeSpan(12, 20, 00), tm.StampList.Single().Begin);
+            Assert.AreEqual(TimeSpan.Zero, tm.StampList.Single().End);
+
+            return tm;
+        }
+
     }
 }

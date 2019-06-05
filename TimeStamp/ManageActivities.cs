@@ -14,11 +14,13 @@ namespace TimeStamp
     {
         public ManageActivities(TimeManager manager)
         {
+            m_manager = manager;
             m_settings = manager.Settings;
             InitializeComponent();
         }
 
         private TimeSettings m_settings;
+        private TimeManager m_manager;
 
         private void ManageActivities_Load(object sender, EventArgs e)
         {
@@ -36,7 +38,7 @@ namespace TimeStamp
 
                 var button = grdActivities.Rows[index].Cells[2] as DataGridViewButtonCell;
 
-                var hasAffectedRecords = (this.Owner as Form1).StampList.SelectMany(s => s.ActivityRecords).Any(r => r.Activity == activity);
+                var hasAffectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Any(r => r.Activity == activity);
                 if (hasAffectedRecords)
                     button.Style.ForeColor = SystemColors.ControlDark;
             }
@@ -54,13 +56,12 @@ namespace TimeStamp
             if (e.ColumnIndex == 0)
             {
                 // rename activity:
-                var form1 = this.Owner as Form1;
 
                 string oldName = currentRow.Tag as string;
                 string newName = currentActivity;
 
-                var affectedDays = form1.StampList.Where(s => s.ActivityRecords.Any(r => r.Activity == oldName)).ToList();
-                var affectedRecords = form1.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Activity == oldName).ToList();
+                var affectedDays = m_manager.StampList.Where(s => s.ActivityRecords.Any(r => r.Activity == oldName)).ToList();
+                var affectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Activity == oldName).ToList();
 
                 DialogResult result;
 
@@ -133,12 +134,10 @@ namespace TimeStamp
             {
                 // delete activity button clicked:
 
-                var form1 = this.Owner as Form1;
-
                 var currentActivity = grdActivities.Rows[e.RowIndex].Tag as string;
 
-                var affectedDays = form1.StampList.Where(s => s.ActivityRecords.Any(r => r.Activity == currentActivity)).ToList();
-                var affectedRecords = form1.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Activity == currentActivity).ToList();
+                var affectedDays = m_manager.StampList.Where(s => s.ActivityRecords.Any(r => r.Activity == currentActivity)).ToList();
+                var affectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Activity == currentActivity).ToList();
 
                 if (affectedRecords.Count == 0)
                 {

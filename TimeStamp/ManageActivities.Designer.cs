@@ -85,7 +85,7 @@
             // 
             this.MorningDefault.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.ColumnHeader;
             this.MorningDefault.FalseValue = "false";
-            this.MorningDefault.HeaderText = "Default for new day";
+            this.MorningDefault.HeaderText = "Default for new day *";
             this.MorningDefault.Name = "MorningDefault";
             this.MorningDefault.ToolTipText = "Determines whether a new day is always started with this activity. If none is set" +
     ", a new day starts with the most recent recorded activity.";

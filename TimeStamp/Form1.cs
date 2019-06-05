@@ -20,6 +20,8 @@ using OfficeOpenXml.Style;
 using System.Diagnostics;
 using SaveFileDialog = System.Windows.Forms.SaveFileDialog;
 using System.Globalization;
+using System.Net.NetworkInformation;
+using System.Threading.Tasks;
 
 namespace TimeStamp
 {
@@ -106,15 +108,11 @@ namespace TimeStamp
             lblTotalBalance.MaximumSize = groupBox1.Size;
             refreshControls();
 
-            pauseSpanRecognizer = new Timer() { Interval = 5000, Enabled = true };
-            pauseSpanRecognizer.Tick += new EventHandler(middaySpan_Tick);
-            checkBox1.Text = "Automatic Pause Recognition ( >" + Settings.AutomaticPauseRecognitionMinPauseTime + " mins AFK between "
-                + Settings.AutomaticPauseRecognitionStartTime.Hours + ":" + Settings.AutomaticPauseRecognitionStartTime.Minutes + "-"
-                + Settings.AutomaticPauseRecognitionStopTime.Hours + ":" + Settings.AutomaticPauseRecognitionStopTime.Minutes + ")";
+            m_timer = new Timer() { Interval = 5000, Enabled = true };
+            m_timer.Tick += new EventHandler(Timer_Tick);
 
             // data bind control values to settings:
 
-            checkBox1.DataBindings.Add(new Binding(nameof(CheckBox.Checked), Settings, nameof(Settings.AutomaticPauseRecognition)));
             cmbStatisticType.DataBindings.Add(new Binding(nameof(ComboBox.SelectedIndex), Settings, nameof(Settings.StatisticType)));
             cmbStatisticRange.DataBindings.Add(new Binding(nameof(ComboBox.SelectedIndex), Settings, nameof(Settings.StatisticRange)));
             this.DataBindings.Add(new Binding(nameof(Form.Width), Settings, nameof(Settings.WindowWidth)));
@@ -134,7 +132,7 @@ namespace TimeStamp
         {
             Settings.SaveSettings();
 
-            Manager.SetTodaysEndAndSaveXml();
+            Manager.SuspendStamping();
 
             this.notifyIcon1.Visible = false;
         }
@@ -198,6 +196,36 @@ namespace TimeStamp
             }
         }
 
+        private bool? m_lastVpnStatus = null;
+        private Task m_checkVpn;
+        private void StartDetectingVpnConnectionChangeAndNotify()
+        {
+            if (Settings.RemindCurrentActivityWhenChangingVPN && (m_checkVpn == null || m_checkVpn.IsCompleted))
+            {
+                m_checkVpn = Task.Run(() =>
+                {
+                    if (NetworkInterface.GetIsNetworkAvailable())
+                    {
+                        NetworkInterface[] interfaces = NetworkInterface.GetAllNetworkInterfaces();
+
+                        bool isVpn = interfaces
+                            .Where(i => i.OperationalStatus == OperationalStatus.Up)
+                            .Any(i => /*default detection: PPP */(i.NetworkInterfaceType == NetworkInterfaceType.Ppp && i.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                            || /*custom detection: by description (e.g. "Cisco AnyConnect")*/ (!String.IsNullOrEmpty(Settings.RemindCurrentActivityWhenChangingVPNWithName) ? i.Description.Contains(Settings.RemindCurrentActivityWhenChangingVPNWithName) : true));
+
+                        if (m_lastVpnStatus.HasValue && m_lastVpnStatus.Value != isVpn)
+                        {
+                            this.Invoke(new Action(() =>
+                            {
+                                PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity.Activity);
+                            }));
+                        }
+
+                        m_lastVpnStatus = isVpn;
+                    }
+                });
+            }
+        }
 
         // Control Handling:
 
@@ -250,26 +278,11 @@ namespace TimeStamp
             txtCurrentShownTotal.Text = FormatTimeSpan(Manager.DayBalance(CurrentShown));
         }
 
-        private static bool TryParseHHMM(string text, out TimeSpan value)
-        {
-            if (TimeSettings.HHMM.IsMatch(text))
-            {
-                int hours = Convert.ToInt32(text.Substring(0, text.IndexOf(":")));
-                int minutes = Convert.ToInt32(text.Substring(text.IndexOf(":") + 1));
-
-                value = new TimeSpan(hours, minutes, 0);
-                return true;
-            }
-
-            value = TimeSpan.Zero;
-            return false;
-        }
-
         #region Current Day - Time Input Fields
 
         private void txtStart_TextChanged(object sender, EventArgs e)
         {
-            if (TryParseHHMM(txtStart.Text, out TimeSpan value))
+            if (TimeManager.TryParseHHMM(txtStart.Text, out TimeSpan value))
             {
                 Manager.SetBegin(CurrentShown, value);
                 UpdateActivityList();
@@ -278,7 +291,7 @@ namespace TimeStamp
         }
         private void txtEnd_TextChanged(object sender, EventArgs e)
         {
-            if (TryParseHHMM(txtEnd.Text, out TimeSpan value))
+            if (TimeManager.TryParseHHMM(txtEnd.Text, out TimeSpan value))
             {
                 if (value >= Manager.GetNowTime() + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification))
                     m_endingPopupShownLastTime = default(DateTime);
@@ -506,7 +519,7 @@ namespace TimeStamp
                 else if (e.ColumnIndex == 1)
                 {
                     // change start
-                    if (TryParseHHMM(text, out TimeSpan value))
+                    if (TimeManager.TryParseHHMM(text, out TimeSpan value))
                     {
                         // add new, pending activity entry if applicable:
                         if (!CurrentShown.ActivityRecords.Contains(currentActivity))
@@ -557,7 +570,7 @@ namespace TimeStamp
                 else if (e.ColumnIndex == 2)
                 {
                     // change end
-                    if (TryParseHHMM(text, out TimeSpan value))
+                    if (TimeManager.TryParseHHMM(text, out TimeSpan value))
                     {
                         // last activity end changed -> also change days end stamp
                         if (e.RowIndex == grdActivities.Rows.Count - 2 /*AllowUserToAddRows also results in an additional line*/)
@@ -669,7 +682,7 @@ namespace TimeStamp
         {
             btnAddTimestamp.Visible = false;
 
-            Manager.CurrentShown = new Stamp() { Day = StampCalendar.SelectionStart };
+            Manager.CurrentShown = new Stamp(Settings.DefaultWorkingHours) { Day = StampCalendar.SelectionStart };
             StampList.Add(CurrentShown);
 
             refreshControls();
@@ -892,6 +905,15 @@ namespace TimeStamp
             }
         }
 
+        private void btnSettings_Click(object sender, EventArgs e)
+        {
+            var diag = new Settings(Manager);
+
+            diag.ShowDialog(this);
+
+            refreshControls();
+        }
+
         private void btnExportExcelActivities_Click(object sender, EventArgs e)
         {
             var exporter = new ExcelExport(this);
@@ -913,14 +935,6 @@ namespace TimeStamp
             var button = (Button)sender;
 
             menu.Show(button, new Point(0, button.Height));
-        }
-
-        private void btnManageActivities_Click(object sender, EventArgs e)
-        {
-            var diag = new ManageActivities(Manager);
-            diag.ShowDialog(this);
-
-            refreshControls();
         }
 
         #endregion
@@ -1017,40 +1031,16 @@ namespace TimeStamp
 
         #endregion
 
+        #region Tick-Timer: End-Notification, Automatic Pause Recognition
 
-        #region Automatic Pause Recognition
-        private MouseHookListener MouseHook;
-        private TimeSpan lastMouseMove;
-        private Timer pauseSpanRecognizer;
-
-        private void MouseHook_MouseMoveExt(object sender, MouseEventExtArgs e)
-        {
-            if (lastMouseMove.TotalMinutes != 0 && Manager.Time.Now.TimeOfDay.Subtract(lastMouseMove).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
-            {
-                Log.Add("Mouse movement after pause: Today: " + Today + ", Activity: " + TodayCurrentActivity);
-                Today.Pause = Manager.GetNowTime() - Manager.GetTime(lastMouseMove);
-                var current = TodayCurrentActivity;
-                TodayCurrentActivity.End = Manager.GetTime(lastMouseMove);
-                Manager.TodayCurrentActivity = null;
-                Manager.StartNewActivity(current.Activity, current.Comment + " Resuming after pause...");
-
-                if (MouseHook != null)
-                    MouseHook.Enabled = false;
-                refreshControls();
-                new System.Threading.Tasks.Task(() =>
-                {
-                    System.Threading.Thread.Sleep(10000);
-                    this.Invoke(new Action(() => { PopupDialog.ShowAfterPause(Today.Pause, current.Activity); }));
-                }).Start();
-                return;
-            }
-            lastMouseMove = Manager.Time.Now.TimeOfDay;
-        }
-
+        private Timer m_timer;
         private int m_minuteThresholdToShowNotification = 5;
         private DateTime m_endingPopupShownLastTime;
-        private void middaySpan_Tick(object sender, EventArgs e)
+
+        private void Timer_Tick(object sender, EventArgs e)
         {
+            // handle 'todays end' notifications:
+
             if ((m_endingPopupShownLastTime == default(DateTime) || m_endingPopupShownLastTime.Date != Today.Day.Date) && Today.Day.Date == Manager.Time.Today)
             {
                 if (Today.End == TimeSpan.Zero && Manager.DayBalance(Today) >= TimeSpan.FromMinutes(-m_minuteThresholdToShowNotification))
@@ -1072,12 +1062,9 @@ namespace TimeStamp
             }
 
 
-            if (!Settings.AutomaticPauseRecognition)
-                return;
-            if (Today.Pause != TimeSpan.Zero)
-                return;
+            // activate / deactivate mouse movement tracking for automatic pause time recognition:
 
-            if ((Manager.Time.Now.TimeOfDay >= Settings.AutomaticPauseRecognitionStartTime) && (Manager.Time.Now.TimeOfDay <= Settings.AutomaticPauseRecognitionStopTime))
+            if (Manager.IsInPauseTimeRecognitionMode)
             {
                 if (MouseHook == null)
                 {
@@ -1089,16 +1076,39 @@ namespace TimeStamp
                 {
                     MouseHook.Enabled = true;
                 }
-                //actively looking for idle
+
+                Manager.LastMouseMove = TimeSpan.Zero;
             }
             else
             {
-                //if not waiting for user to come back from afk, stop looking for idle
+                // if not waiting for user to come back from afk, stop looking for idle
                 if (MouseHook != null && MouseHook.Enabled)
                 {
                     MouseHook.Enabled = false;
                 }
             }
+
+
+
+            // check whether there is an active vpn connection, and if applicable show current activity reminder:
+
+            StartDetectingVpnConnectionChangeAndNotify();
+        }
+
+
+        private MouseHookListener MouseHook;
+
+        private void MouseHook_MouseMoveExt(object sender, MouseEventExtArgs e)
+        {
+            if (Manager.IsQualifiedPauseBreak)
+            {
+                Manager.ResumeStamping();
+
+                // refresh UI:
+                refreshControls();
+            }
+
+            Manager.LastMouseMove = Manager.Time.Now.TimeOfDay;
         }
 
         #endregion

@@ -63,5 +63,7 @@ namespace TimeStamp.Tests
             Assert.AreEqual(manualEnd, today.ActivityRecords.Single().End);
         }
 
+
+
     }
 }

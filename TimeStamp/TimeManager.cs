@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -19,21 +20,78 @@ namespace TimeStamp
 
         // Data:
 
+        /// <summary>
+        /// The path to the stamp list xml file on the file system
+        /// </summary>
         public string StampFilePath { get; } = ".\\StampFile.xml";
 
+        /// <summary>
+        /// The list of all available stamps
+        /// </summary>
         public List<Stamp> StampList { get; set; }
+
+        /// <summary>
+        /// The currently displayed stamp in the UI
+        /// </summary>
         public Stamp CurrentShown { get; set; }
 
 
         // Today Data:
 
+        /// <summary>
+        /// Todays current stamp
+        /// </summary>
         public Stamp Today { get; set; }
 
-        public void SetToday()
+        /// <summary>
+        /// Todays currently running activity
+        /// </summary>
+        public ActivityRecord TodayCurrentActivity { get; set; }
+
+        public event Action CurrentActivityUpdated = delegate { };
+
+
+        // Methods:
+
+        public void Initialize()
         {
+            try
+            {
+                FileStream fs = new FileStream(StampFilePath, FileMode.Open);
+                StampList = LoadStampListXml(XElement.Load(fs));
+                fs.Close();
+            }
+            catch (FileNotFoundException)
+            {
+                StampList = new List<Stamp>();
+            }
+
+            foreach (var Stamp in StampList.ToArray())
+                if (Stamp == null)
+                    StampList.Remove(Stamp);
+
+            // set todays stamp:
+            var todayEntries = StampList.Where(t => t.Day == Time.Today);
+
+            if (todayEntries.Count() > 1)
+                throw new IndexOutOfRangeException("Several Todays in StampList found!");
+
+            ResumeStamping();
+
+            if (Today == null)
+                throw new InvalidDataException("Today Stamp is null");
+        }
+
+        public void ResumeStamping()
+        {
+            // assuming here that activity is null!
+            //if (TodayCurrentActivity != null)
+            //throw new NotSupportedException($"TodayCurrentActivity is not null after resume: {TodayCurrentActivity.Activity}, started: {TodayCurrentActivity.Begin}");
+
             // this can happen when:
             // starting the app (e.g. new day autostart, same day computer restart)
             // resuming from sleep (e.g. new day resume, same day resume)
+            // resuming from lunch break (insert pause parameter)..
 
             // find existing stamp for today:
 
@@ -41,45 +99,33 @@ namespace TimeStamp
 
             if (existing != null)
             {
-                // TODO: (optionally) ask in a notification, whether have been working or not since last known stamp (default yes, if choosing no will automatically insert a pause)...
-
                 Today = CurrentShown = existing;
                 Today.End = TimeSpan.Zero;
 
-                // assuming the last activity is still valid, and the downtime is not considered a break:
-                // if there is no running activity, try to restore the last activity
-                if (TodayCurrentActivity == null)
-                {
-                    var openEnd = existing.ActivityRecords.FirstOrDefault(r => !r.End.HasValue);
-                    if (openEnd != null) // this case should actually never happen?
-                        TodayCurrentActivity = openEnd;
-                    else
-                    {
-                        // get lastest logged activity:
-                        var last = existing.GetLastActivity();
-                        // if log off time since then was more than 7 minutes, create and start new activity record (better tracking):
-                        if (GetNowTime() - last.End.Value > TimeSpan.FromMinutes(7))
-                        {
-                            existing.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
-                            StartNewActivity(last.Activity, null);
-                        }
-                        // otherwise, just resume that activity:
-                        else
-                        {
-                            TodayCurrentActivity = last;
-                        }
-                    }
-                }
+                // TODO: (optionally) ask in a notification, whether have been working or not since last known stamp (default yes, if choosing no will automatically insert a pause)...
 
+                bool hasSetPause = RestoreLastActivity(Today);
+
+                // update event (for ui):
                 CurrentActivityUpdated();
-                PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity.Activity);
+
+                // show notification:
+                if (hasSetPause)
+                    //new Task(() =>
+                    //{
+                    //    System.Threading.Thread.Sleep(10000);
+                    //}).Start();
+                    PopupDialog.ShowAfterPause(Today.Pause, TodayCurrentActivity.Activity);
+                else
+                    PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity.Activity);
+
                 return;
             }
 
             // new day, new stamp:
 
             TodayCurrentActivity = null;
-            Today = CurrentShown = new Stamp(Time.Today, GetNowTime());
+            Today = CurrentShown = new Stamp(Time.Today, GetNowTime(), Settings.DefaultWorkingHours);
             StampList.Add(Today);
 
             // not specified ? -> keep tracking for latest activity...
@@ -101,9 +147,73 @@ namespace TimeStamp
             PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity.Activity);
         }
 
-        public ActivityRecord TodayCurrentActivity { get; set; }
+        private bool RestoreLastActivity(Stamp today)
+        {
+            // assuming the last activity is still valid, and the downtime is not considered a break:
+            // if there is no running activity, try to restore the last activity
+            if (TodayCurrentActivity == null)
+            {
+                var openEnd = today.ActivityRecords.FirstOrDefault(r => !r.End.HasValue);
+                if (openEnd != null) // this case should actually never happen?
+                {
+                    Log.Add("Warning: RestoreLastActivity has found an open end activity. " + new StackTrace().ToString());
+                    TodayCurrentActivity = openEnd;
+                }
+                else
+                {
+                    // this branch should be the default case for this method:
 
-        public event Action CurrentActivityUpdated = delegate { };
+                    // get lastest logged activity:
+                    var last = today.GetLastActivity();
+
+                    // the downtime is considered a break:
+                    if (IsQualifiedPauseBreak)
+                    {
+                        // determine pause time from last qualified event:
+
+                        TimeSpan pauseStartTime;
+
+                        // last lock off time is 'master':
+                        if (Settings.IsLockingComputerWhenLeaving)
+                        {
+                            pauseStartTime = last.End.Value;
+                            TodayCurrentActivity = last;
+                        }
+                        // last mouse movement time is 'master':
+                        else
+                        {
+                            pauseStartTime = GetTime(LastMouseMove);
+                            LastMouseMove = TimeSpan.Zero;
+
+                            last.End = pauseStartTime;
+                            TodayCurrentActivity = last;
+                        }
+
+                        // set pause:
+                        Today.Pause = GetNowTime() - pauseStartTime;
+
+                        // ... and resume with a new activity now:
+                        TodayCurrentActivity = null;
+                        StartNewActivity(last.Activity, last.Comment + " Resuming after pause...");
+                        return true;
+                    }
+                    // the downtime is not considered a break:
+                    // otherwise, if log off time since then was more than 7 minutes, create and start new activity record (better documented, as the end time of the 'relative longer' absence is not lost):
+                    else if (GetNowTime() - last.End.Value > TimeSpan.FromMinutes(7))
+                    {
+                        today.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
+                        StartNewActivity(last.Activity, null);
+                    }
+                    // otherwise, assume this is a total unrelevant break, e.g. fetched a cup of coffee, went to toilet, so just resume that activity (end time is reset to null, ergo lost and not documented):
+                    else
+                    {
+                        TodayCurrentActivity = last;
+                        last.End = null;
+                    }
+                }
+            }
+            return false;
+        }
 
         public void StartNewActivity(string name, string comment, bool autoMatchLastComment = false)
         {
@@ -137,38 +247,19 @@ namespace TimeStamp
                 throw new ArgumentOutOfRangeException($"There are {unfinishedActivities.Count()} simultaneously running activies: {String.Join(", ", unfinishedActivities.Select(a => a.Activity))}");
         }
 
-
-        // Methods:
-
-        public void Initialize()
+        public void SuspendStamping()
         {
-            try
-            {
-                FileStream fs = new FileStream(StampFilePath, FileMode.Open);
-                StampList = LoadStampListXml(XElement.Load(fs));
-                fs.Close();
-            }
-            catch (FileNotFoundException)
-            {
-                StampList = new List<Stamp>();
-            }
+            // Set Todays End And Save Xml:
 
-            foreach (var Stamp in StampList.ToArray())
-                if (Stamp == null)
-                    StampList.Remove(Stamp);
+            // update end time:
+            // if end time has been inserted and is smaller than current end time, set new end time to 'now' (TODO: is this always desired? usually end time is empty anyway, except when explicitly provided...)
+            if (Today.Begin.TotalMinutes != 0 && Today.End.TotalMinutes < Time.Now.TimeOfDay.TotalMinutes)
+                Today.End = GetNowTime();
 
-            // set todays stamp:
-            var todayEntries = StampList.Where(t => t.Day == Time.Today);
+            FinishActivity(Today.End);
 
-            if (todayEntries.Count() > 1)
-                throw new IndexOutOfRangeException("Several Todays in StampList found!");
-
-            SetToday();
-
-            if (Today == null)
-                throw new InvalidDataException("Today Stamp is null");
+            SaveStampListXml();
         }
-
 
         #region XML-IO
 
@@ -206,13 +297,13 @@ namespace TimeStamp
                 var stampXml = new XElement("Stamp");
 
                 stampXml.Add(new XElement("day", stamp.Day));
-                stampXml.Add(new XElement("begin", SerializeHHMM(stamp.Begin)));
+                stampXml.Add(new XElement("begin", ParseHHMM(stamp.Begin)));
                 stampXml.Add(new XElement("pause", SerializeMM(stamp.Pause)));
-                stampXml.Add(new XElement("end", SerializeHHMM(stamp.End)));
+                stampXml.Add(new XElement("end", ParseHHMM(stamp.End)));
                 if (!String.IsNullOrEmpty(stamp.Comment))
                     stampXml.Add(new XElement("comment", stamp.Comment));
-                if (stamp.WorkingHours != Stamp.DefaultWorkingHours)
-                    stampXml.Add(new XElement("hours", stamp.WorkingHours));
+                // always export working hours, as it is configurable:
+                stampXml.Add(new XElement("hours", stamp.WorkingHours));
 
                 if (stamp.ActivityRecords.Count > 0)
                 {
@@ -222,8 +313,8 @@ namespace TimeStamp
                     {
                         activityRoot.Add(new XElement("Activity",
                             new XAttribute("Name", activity.Activity ?? String.Empty),
-                            new XAttribute("Begin", SerializeHHMM(activity.Begin)),
-                            new XAttribute("End", SerializeHHMM(activity.End)),
+                            new XAttribute("Begin", ParseHHMM(activity.Begin)),
+                            new XAttribute("End", ParseHHMM(activity.End)),
                             new XAttribute("Comment", activity.Comment ?? String.Empty)));
                     }
                 }
@@ -233,14 +324,25 @@ namespace TimeStamp
             return rootXml;
         }
 
-        private string SerializeHHMM(TimeSpan? time)
+        public static string ParseHHMM(TimeSpan? time)
         {
             if (!time.HasValue)
                 return String.Empty;
             return time.Value.Hours + ":" + time.Value.Minutes;
         }
 
-        private TimeSpan SerializeHHMM(string time)
+        public static bool TryParseHHMM(string time, out TimeSpan result)
+        {
+            if (TimeSettings.HHMM.IsMatch(time) && Int32.TryParse(time.Substring(0, time.IndexOf(":")), out int hours) && Int32.TryParse(time.Substring(time.IndexOf(":") + 1), out int minutes))
+            {
+                result = new TimeSpan(hours, minutes, 0);
+                return true;
+            }
+            result = TimeSpan.Zero;
+            return false;
+        }
+
+        public static TimeSpan ParseHHMM(string time)
         {
             return new TimeSpan(Convert.ToInt32(time.Substring(0, time.IndexOf(":"))), Convert.ToInt32(time.Substring(time.IndexOf(":") + 1)), 0);
         }
@@ -265,14 +367,14 @@ namespace TimeStamp
             List<Stamp> stamps = new List<Stamp>();
             foreach (var stampXml in xml.Elements("Stamp"))
             {
-                var stamp = new Stamp()
+                var stamp = new Stamp(Settings.DefaultWorkingHours)
                 {
                     Day = Convert.ToDateTime(stampXml.Element("day").Value),
-                    Begin = SerializeHHMM(stampXml.Element("begin").Value),
-                    End = SerializeHHMM(stampXml.Element("end").Value),
+                    Begin = ParseHHMM(stampXml.Element("begin").Value),
+                    End = ParseHHMM(stampXml.Element("end").Value),
                     Pause = SerializeMM(stampXml.Element("pause").Value),
                     Comment = stampXml.Element("comment") != null ? stampXml.Element("comment").Value : String.Empty,
-                    WorkingHours = stampXml.Element("hours") != null ? Convert.ToInt32(stampXml.Element("hours").Value) : Stamp.DefaultWorkingHours
+                    WorkingHours = stampXml.Element("hours") != null ? Convert.ToInt32(stampXml.Element("hours").Value) : 8 // legacy, when value was not configurable it was always 8
                 };
 
                 if (stampXml.Element("Activities") != null)
@@ -283,8 +385,8 @@ namespace TimeStamp
                         stamp.ActivityRecords.Add(new ActivityRecord()
                         {
                             Activity = actxml.Attribute("Name").Value,
-                            Begin = SerializeHHMM(actxml.Attribute("Begin").Value),
-                            End = SerializeHHMM(actxml.Attribute("End").Value),
+                            Begin = ParseHHMM(actxml.Attribute("Begin").Value),
+                            End = ParseHHMM(actxml.Attribute("End").Value),
                             Comment = actxml.Attribute("Comment").Value
                         });
                     }
@@ -296,33 +398,6 @@ namespace TimeStamp
         }
 
         #endregion
-
-
-        public void ResumeStamping()
-        {
-            // assuming here that 
-            if (TodayCurrentActivity != null)
-                throw new NotSupportedException($"TodayCurrentActivity is not null after resume: {TodayCurrentActivity.Activity}, started: {TodayCurrentActivity.Begin}");
-
-            SetToday();
-        }
-
-        public void SuspendStamping()
-        {
-            SetTodaysEndAndSaveXml();
-        }
-
-        public void SetTodaysEndAndSaveXml()
-        {
-            // update end time:
-            // if end time has been inserted and is smaller than current end time, set new end time to 'now' (TODO: is this always desired? usually end time is empty anyway, except when explicitly provided...)
-            if (Today.Begin.TotalMinutes != 0 && Today.End.TotalMinutes < Time.Now.TimeOfDay.TotalMinutes)
-                Today.End = GetNowTime();
-
-            FinishActivity(Today.End);
-
-            SaveStampListXml();
-        }
 
 
         // Actions:
@@ -550,6 +625,50 @@ namespace TimeStamp
                 var workDuration = stamp.End - stamp.Begin;
                 var activityDuration = TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => Total(a).TotalMinutes));
                 stamp.Pause = workDuration > activityDuration ? workDuration - activityDuration : TimeSpan.Zero;
+            }
+        }
+
+
+        // Pause Recognition:
+
+
+        public TimeSpan LastMouseMove { get; set; }
+
+        public bool IsInPauseTimeRecognitionMode
+        {
+            get
+            {
+                return Settings.AutomaticPauseRecognition
+                    && (Time.Now.TimeOfDay >= Settings.AutomaticPauseRecognitionStartTime)
+                    && (Time.Now.TimeOfDay <= Settings.AutomaticPauseRecognitionStopTime)
+                    && Today.Pause == TimeSpan.Zero;
+            }
+        }
+
+        public bool IsQualifiedPauseBreak
+        {
+            get
+            {
+                // is in time slot, doesnt already have pause set:
+                if (!IsInPauseTimeRecognitionMode)
+                    return false;
+
+                // last lock off time is 'master':
+                if (Settings.IsLockingComputerWhenLeaving)
+                {
+                    // last activitiy end is known and qualifies in time span:
+                    if (Today.GetLastActivity().End.HasValue && Time.Now.TimeOfDay.Subtract(Today.GetLastActivity().End.Value).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
+                        return true;
+                }
+                // last mouse movement time is 'master':
+                else
+                {
+                    // last mouse movement is known and qualifies in time span:
+                    if (LastMouseMove != TimeSpan.Zero && Time.Now.TimeOfDay.Subtract(LastMouseMove).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
+                        return true;
+                }
+
+                return false;
             }
         }
 
