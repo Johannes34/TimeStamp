@@ -147,6 +147,7 @@ namespace TimeStamp
 
 
         public List<string> TrackedActivities { get; set; }
+        public List<string> TrackedActivitiesComments { get; set; }
         public string AlwaysStartNewDayWithActivity { get; set; } = "Product Development";
 
 
@@ -176,6 +177,7 @@ namespace TimeStamp
             TimeInLieu,
             Activities,
             WeeklyActivities,
+            ActivityComments
         };
 
         public enum StatisticRanges
@@ -186,6 +188,7 @@ namespace TimeStamp
             RecentTerm,
             RecentQuarter,
             RecentMonth,
+            RecentFortnight,
             RecentWeek,
 
             SelectedYear,
@@ -197,6 +200,7 @@ namespace TimeStamp
 
         public int WindowWidth { get; set; }
         public int WindowHeight { get; set; }
+
 
 
         public bool DisablePopupNotifications { get; set; } = false;

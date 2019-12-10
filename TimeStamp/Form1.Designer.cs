@@ -30,8 +30,8 @@
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea2 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea3 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Series series3 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.notifyIcon1 = new System.Windows.Forms.NotifyIcon(this.components);
             this.label1 = new System.Windows.Forms.Label();
             this.txtStart = new System.Windows.Forms.TextBox();
@@ -42,7 +42,6 @@
             this.lblTotal = new System.Windows.Forms.Label();
             this.lblToday = new System.Windows.Forms.GroupBox();
             this.lblActivityWarning = new System.Windows.Forms.Label();
-            this.cbActivityDetails = new System.Windows.Forms.CheckBox();
             this.txtCurrentShownTotal = new System.Windows.Forms.TextBox();
             this.grdActivities = new System.Windows.Forms.DataGridView();
             this.StartActivity = new System.Windows.Forms.DataGridViewButtonColumn();
@@ -69,6 +68,7 @@
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.btnSettings = new System.Windows.Forms.Button();
             this.btnExportExcelActivities = new System.Windows.Forms.Button();
+            this.timelineControl1 = new TimeStamp.TimelineControl();
             this.lblToday.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grdActivities)).BeginInit();
             this.groupBox1.SuspendLayout();
@@ -86,7 +86,6 @@
             // 
             // label1
             // 
-            this.label1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label1.AutoSize = true;
             this.label1.Location = new System.Drawing.Point(6, 26);
             this.label1.Name = "label1";
@@ -96,7 +95,6 @@
             // 
             // txtStart
             // 
-            this.txtStart.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.txtStart.Location = new System.Drawing.Point(117, 23);
             this.txtStart.MaxLength = 5;
             this.txtStart.Name = "txtStart";
@@ -107,8 +105,7 @@
             // 
             // txtEnd
             // 
-            this.txtEnd.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.txtEnd.Location = new System.Drawing.Point(117, 46);
+            this.txtEnd.Location = new System.Drawing.Point(117, 49);
             this.txtEnd.MaxLength = 5;
             this.txtEnd.Name = "txtEnd";
             this.txtEnd.Size = new System.Drawing.Size(57, 20);
@@ -118,9 +115,8 @@
             // 
             // label2
             // 
-            this.label2.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(6, 49);
+            this.label2.Location = new System.Drawing.Point(6, 52);
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(69, 13);
             this.label2.TabIndex = 2;
@@ -128,8 +124,7 @@
             // 
             // txtPause
             // 
-            this.txtPause.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.txtPause.Location = new System.Drawing.Point(117, 69);
+            this.txtPause.Location = new System.Drawing.Point(117, 75);
             this.txtPause.MaxLength = 3;
             this.txtPause.Name = "txtPause";
             this.txtPause.Size = new System.Drawing.Size(57, 20);
@@ -139,9 +134,8 @@
             // 
             // label3
             // 
-            this.label3.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label3.AutoSize = true;
-            this.label3.Location = new System.Drawing.Point(6, 72);
+            this.label3.Location = new System.Drawing.Point(6, 78);
             this.label3.Name = "label3";
             this.label3.Size = new System.Drawing.Size(105, 13);
             this.label3.TabIndex = 4;
@@ -151,7 +145,7 @@
             // 
             this.lblTotal.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.lblTotal.AutoSize = true;
-            this.lblTotal.Location = new System.Drawing.Point(6, 145);
+            this.lblTotal.Location = new System.Drawing.Point(6, 177);
             this.lblTotal.Name = "lblTotal";
             this.lblTotal.Size = new System.Drawing.Size(82, 13);
             this.lblTotal.TabIndex = 7;
@@ -161,7 +155,7 @@
             // lblToday
             // 
             this.lblToday.Controls.Add(this.lblActivityWarning);
-            this.lblToday.Controls.Add(this.cbActivityDetails);
+            this.lblToday.Controls.Add(this.timelineControl1);
             this.lblToday.Controls.Add(this.txtCurrentShownTotal);
             this.lblToday.Controls.Add(this.grdActivities);
             this.lblToday.Controls.Add(this.label5);
@@ -179,7 +173,7 @@
             this.lblToday.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblToday.Location = new System.Drawing.Point(0, 0);
             this.lblToday.Name = "lblToday";
-            this.lblToday.Size = new System.Drawing.Size(549, 169);
+            this.lblToday.Size = new System.Drawing.Size(549, 256);
             this.lblToday.TabIndex = 8;
             this.lblToday.TabStop = false;
             this.lblToday.Text = "Today:";
@@ -189,32 +183,19 @@
             this.lblActivityWarning.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.lblActivityWarning.BackColor = System.Drawing.Color.Red;
             this.lblActivityWarning.Font = new System.Drawing.Font("Microsoft Sans Serif", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.lblActivityWarning.Location = new System.Drawing.Point(512, 76);
+            this.lblActivityWarning.Location = new System.Drawing.Point(512, 161);
             this.lblActivityWarning.Name = "lblActivityWarning";
             this.lblActivityWarning.Size = new System.Drawing.Size(25, 33);
             this.lblActivityWarning.TabIndex = 42;
             this.lblActivityWarning.Text = "❗";
             this.lblActivityWarning.Visible = false;
             // 
-            // cbActivityDetails
-            // 
-            this.cbActivityDetails.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
-            this.cbActivityDetails.AutoSize = true;
-            this.cbActivityDetails.Location = new System.Drawing.Point(418, 144);
-            this.cbActivityDetails.Name = "cbActivityDetails";
-            this.cbActivityDetails.Size = new System.Drawing.Size(125, 17);
-            this.cbActivityDetails.TabIndex = 41;
-            this.cbActivityDetails.Text = "Show Activity Details";
-            this.toolTip1.SetToolTip(this.cbActivityDetails, "Toggles summary and details+edit mode for activity grid");
-            this.cbActivityDetails.UseVisualStyleBackColor = true;
-            this.cbActivityDetails.CheckedChanged += new System.EventHandler(this.cbActivityDetails_CheckedChanged);
-            // 
             // txtCurrentShownTotal
             // 
             this.txtCurrentShownTotal.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.txtCurrentShownTotal.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.txtCurrentShownTotal.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.txtCurrentShownTotal.Location = new System.Drawing.Point(117, 145);
+            this.txtCurrentShownTotal.Location = new System.Drawing.Point(117, 177);
             this.txtCurrentShownTotal.MaxLength = 2;
             this.txtCurrentShownTotal.Name = "txtCurrentShownTotal";
             this.txtCurrentShownTotal.ReadOnly = true;
@@ -228,8 +209,8 @@
             this.grdActivities.AllowUserToDeleteRows = false;
             this.grdActivities.AllowUserToOrderColumns = true;
             this.grdActivities.AllowUserToResizeRows = false;
-            this.grdActivities.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
+            this.grdActivities.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.grdActivities.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.AllCells;
             this.grdActivities.BackgroundColor = System.Drawing.SystemColors.Control;
@@ -240,11 +221,11 @@
             this.Activity,
             this.Hours,
             this.Comment});
-            this.grdActivities.Location = new System.Drawing.Point(180, 23);
+            this.grdActivities.Location = new System.Drawing.Point(234, 23);
             this.grdActivities.Name = "grdActivities";
             this.grdActivities.RowHeadersVisible = false;
             this.grdActivities.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.CellSelect;
-            this.grdActivities.Size = new System.Drawing.Size(363, 90);
+            this.grdActivities.Size = new System.Drawing.Size(303, 176);
             this.grdActivities.TabIndex = 37;
             this.grdActivities.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.grdActivities_CellContentClick);
             this.grdActivities.CellValueChanged += new System.Windows.Forms.DataGridViewCellEventHandler(this.grdActivities_CellValueChanged);
@@ -282,9 +263,8 @@
             // 
             // label5
             // 
-            this.label5.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label5.AutoSize = true;
-            this.label5.Location = new System.Drawing.Point(6, 96);
+            this.label5.Location = new System.Drawing.Point(6, 104);
             this.label5.Name = "label5";
             this.label5.Size = new System.Drawing.Size(81, 13);
             this.label5.TabIndex = 11;
@@ -292,8 +272,7 @@
             // 
             // txtWorkingHours
             // 
-            this.txtWorkingHours.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
-            this.txtWorkingHours.Location = new System.Drawing.Point(117, 93);
+            this.txtWorkingHours.Location = new System.Drawing.Point(117, 101);
             this.txtWorkingHours.MaxLength = 2;
             this.txtWorkingHours.Name = "txtWorkingHours";
             this.txtWorkingHours.Size = new System.Drawing.Size(57, 20);
@@ -303,9 +282,8 @@
             // 
             // label4
             // 
-            this.label4.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(6, 122);
+            this.label4.Location = new System.Drawing.Point(6, 130);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(54, 13);
             this.label4.TabIndex = 9;
@@ -313,11 +291,12 @@
             // 
             // txtComment
             // 
-            this.txtComment.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtComment.Location = new System.Drawing.Point(117, 119);
+            this.txtComment.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this.txtComment.Location = new System.Drawing.Point(117, 127);
+            this.txtComment.Multiline = true;
             this.txtComment.Name = "txtComment";
-            this.txtComment.Size = new System.Drawing.Size(426, 20);
+            this.txtComment.Size = new System.Drawing.Size(111, 41);
             this.txtComment.TabIndex = 8;
             this.toolTip1.SetToolTip(this.txtComment, "Text");
             this.txtComment.TextChanged += new System.EventHandler(this.txtComment_TextChanged);
@@ -327,7 +306,7 @@
             this.btnAddTimestamp.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnAddTimestamp.Location = new System.Drawing.Point(3, 16);
             this.btnAddTimestamp.Name = "btnAddTimestamp";
-            this.btnAddTimestamp.Size = new System.Drawing.Size(543, 150);
+            this.btnAddTimestamp.Size = new System.Drawing.Size(543, 237);
             this.btnAddTimestamp.TabIndex = 39;
             this.btnAddTimestamp.Text = "No record for this day. Click here to add a new entry.";
             this.btnAddTimestamp.UseVisualStyleBackColor = true;
@@ -338,7 +317,7 @@
             // 
             this.groupBox1.Controls.Add(this.lblTotalBalance);
             this.groupBox1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox1.Location = new System.Drawing.Point(0, 480);
+            this.groupBox1.Location = new System.Drawing.Point(0, 567);
             this.groupBox1.Name = "groupBox1";
             this.groupBox1.Size = new System.Drawing.Size(549, 56);
             this.groupBox1.TabIndex = 9;
@@ -363,7 +342,7 @@
             // 
             // lblStatisticValues
             // 
-            this.lblStatisticValues.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            this.lblStatisticValues.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
             | System.Windows.Forms.AnchorStyles.Left)));
             this.lblStatisticValues.Location = new System.Drawing.Point(12, 190);
             this.lblStatisticValues.Name = "lblStatisticValues";
@@ -393,20 +372,20 @@
             // 
             // chart1
             // 
-            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
+            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
-            chartArea2.Name = "ChartArea1";
-            this.chart1.ChartAreas.Add(chartArea2);
+            chartArea3.Name = "ChartArea1";
+            this.chart1.ChartAreas.Add(chartArea3);
             this.chart1.Location = new System.Drawing.Point(224, 25);
             this.chart1.Name = "chart1";
             this.chart1.Palette = System.Windows.Forms.DataVisualization.Charting.ChartColorPalette.SeaGreen;
-            series2.ChartArea = "ChartArea1";
-            series2.CustomProperties = "EmptyPointValue=Zero";
-            series2.IsVisibleInLegend = false;
-            series2.IsXValueIndexed = true;
-            series2.Name = "S";
-            this.chart1.Series.Add(series2);
+            series3.ChartArea = "ChartArea1";
+            series3.CustomProperties = "EmptyPointValue=Zero";
+            series3.IsVisibleInLegend = false;
+            series3.IsXValueIndexed = true;
+            series3.Name = "S";
+            this.chart1.Series.Add(series3);
             this.chart1.Size = new System.Drawing.Size(319, 186);
             this.chart1.TabIndex = 33;
             this.chart1.Text = "chart1";
@@ -446,7 +425,7 @@
             this.groupBox2.Controls.Add(this.chart1);
             this.groupBox2.Controls.Add(this.cmbStatisticRange);
             this.groupBox2.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox2.Location = new System.Drawing.Point(0, 169);
+            this.groupBox2.Location = new System.Drawing.Point(0, 256);
             this.groupBox2.Name = "groupBox2";
             this.groupBox2.Size = new System.Drawing.Size(549, 249);
             this.groupBox2.TabIndex = 37;
@@ -460,7 +439,7 @@
             this.groupBox3.Controls.Add(this.btnTakeDayOff);
             this.groupBox3.Controls.Add(this.btnDeleteStamp);
             this.groupBox3.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox3.Location = new System.Drawing.Point(0, 418);
+            this.groupBox3.Location = new System.Drawing.Point(0, 505);
             this.groupBox3.Name = "groupBox3";
             this.groupBox3.Size = new System.Drawing.Size(549, 62);
             this.groupBox3.TabIndex = 38;
@@ -488,11 +467,34 @@
             this.btnExportExcelActivities.UseVisualStyleBackColor = true;
             this.btnExportExcelActivities.Click += new System.EventHandler(this.btnExportExcelActivities_Click);
             // 
+            // timelineControl1
+            // 
+            this.timelineControl1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.timelineControl1.DrawDisplayTexts = true;
+            this.timelineControl1.EdgeColor = System.Drawing.SystemColors.InactiveCaptionText;
+            this.timelineControl1.EmptyTimelineThickness = 1;
+            this.timelineControl1.ForeColor = System.Drawing.SystemColors.GrayText;
+            this.timelineControl1.HighlightEdgeColor = System.Drawing.SystemColors.ActiveCaption;
+            this.timelineControl1.HighlightForeColor = System.Drawing.SystemColors.GradientActiveCaption;
+            this.timelineControl1.HighlightInActiveEdgeColor = System.Drawing.SystemColors.InactiveCaption;
+            this.timelineControl1.HighlightInActiveForeColor = System.Drawing.SystemColors.GradientInactiveCaption;
+            this.timelineControl1.Location = new System.Drawing.Point(9, 205);
+            this.timelineControl1.MaximumValue = 0D;
+            this.timelineControl1.MinimumValue = 0D;
+            this.timelineControl1.Name = "timelineControl1";
+            this.timelineControl1.OnDragSection = null;
+            this.timelineControl1.OnDragSeparator = null;
+            this.timelineControl1.OnSectionClicked = null;
+            this.timelineControl1.Size = new System.Drawing.Size(528, 45);
+            this.timelineControl1.TabIndex = 43;
+            this.timelineControl1.TimelineThickness = 8;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(549, 536);
+            this.ClientSize = new System.Drawing.Size(549, 623);
             this.Controls.Add(this.lblToday);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox3);
@@ -551,9 +553,9 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn Comment;
         private System.Windows.Forms.TextBox txtCurrentShownTotal;
         public System.Windows.Forms.Button btnExportExcelActivities;
-        private System.Windows.Forms.CheckBox cbActivityDetails;
         private System.Windows.Forms.Label lblActivityWarning;
         private System.Windows.Forms.Button btnSettings;
+        private TimelineControl timelineControl1;
     }
 }
 

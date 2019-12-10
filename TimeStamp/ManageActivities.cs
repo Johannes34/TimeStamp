@@ -27,21 +27,28 @@ namespace TimeStamp
             FillGrid();
         }
 
+        private int m_nameColumnIndex = 0;
+        private int m_commentColumnIndex = 1;
+        private int m_isDefaultColumnIndex = 2;
+        private int m_deleteColumnIndex = 3;
+
         private void FillGrid()
         {
             grdActivities.Rows.Clear();
 
             foreach (var activity in m_settings.TrackedActivities)
             {
-                int index = grdActivities.Rows.Add(activity, activity == m_settings.AlwaysStartNewDayWithActivity, "");
+                int index = grdActivities.Rows.Add(activity, "" /*TODO*/, activity == m_settings.AlwaysStartNewDayWithActivity, "");
                 grdActivities.Rows[index].Tag = activity;
 
-                var button = grdActivities.Rows[index].Cells[2] as DataGridViewButtonCell;
+                var button = grdActivities.Rows[index].Cells[m_deleteColumnIndex] as DataGridViewButtonCell;
 
                 var hasAffectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Any(r => r.Activity == activity);
                 if (hasAffectedRecords)
                     button.Style.ForeColor = SystemColors.ControlDark;
             }
+
+            UpdateEnabled();
         }
 
         private void grdActivities_CellValueChanged(object sender, DataGridViewCellEventArgs e)
@@ -51,9 +58,9 @@ namespace TimeStamp
 
             var currentRow = grdActivities.Rows[e.RowIndex];
 
-            var currentActivity = grdActivities.Rows[e.RowIndex].Cells[0].Value as string;
+            var currentActivity = grdActivities.Rows[e.RowIndex].Cells[m_nameColumnIndex].Value as string;
 
-            if (e.ColumnIndex == 0)
+            if (e.ColumnIndex == m_nameColumnIndex)
             {
                 // rename activity:
 
@@ -104,25 +111,29 @@ namespace TimeStamp
                     }
 
                     if (m_settings.AlwaysStartNewDayWithActivity == newName)
-                        currentRow.Cells[1].Value = true;
+                        currentRow.Cells[m_isDefaultColumnIndex].Value = true;
                 }
                 else
                 {
-                    grdActivities.Rows[e.RowIndex].Cells[0].Value = oldName;
+                    grdActivities.Rows[e.RowIndex].Cells[m_nameColumnIndex].Value = oldName;
                 }
             }
-            else if (e.ColumnIndex == 1)
+            else if (e.ColumnIndex == m_commentColumnIndex)
+            {
+
+            }
+            else if (e.ColumnIndex == m_isDefaultColumnIndex)
             {
                 // set default activity for new days:
 
                 // reset all other values:
                 foreach (DataGridViewRow row in grdActivities.Rows)
                 {
-                    row.Cells[1].Value = false;
+                    row.Cells[m_isDefaultColumnIndex].Value = false;
                 }
 
                 // set current value:
-                m_settings.AlwaysStartNewDayWithActivity = (bool)currentRow.Cells[1].Value ? (string)currentRow.Cells[0].Value : null;
+                m_settings.AlwaysStartNewDayWithActivity = (bool)currentRow.Cells[m_isDefaultColumnIndex].Value ? (string)currentRow.Cells[m_nameColumnIndex].Value : null;
             }
         }
 
@@ -154,6 +165,56 @@ namespace TimeStamp
                 }
 
                 FillGrid();
+            }
+        }
+
+        private void grdActivities_CurrentCellChanged(object sender, EventArgs e)
+        {
+            UpdateEnabled();
+        }
+
+        private void btnMoveUp_Click(object sender, EventArgs e)
+        {
+            Move(true);
+        }
+
+        private void btnMoveDown_Click(object sender, EventArgs e)
+        {
+            Move(false);
+        }
+
+        private void UpdateEnabled()
+        {
+            var selectedCell = grdActivities.SelectedCells.OfType<DataGridViewCell>().FirstOrDefault();
+
+            var activity = m_settings.TrackedActivities.FirstOrDefault(a => selectedCell?.OwningRow.Tag as string == a);
+            var index = m_settings.TrackedActivities.IndexOf(activity);
+
+            bool hasSelection = selectedCell != null && selectedCell.OwningRow.Tag != null;
+
+            btnMoveUp.Enabled = hasSelection && index > 0;
+            btnMoveDown.Enabled = hasSelection && index < m_settings.TrackedActivities.Count - 1;
+        }
+
+        private void Move(bool up)
+        {
+            var selectedCell = grdActivities.SelectedCells.OfType<DataGridViewCell>().FirstOrDefault();
+            int column = selectedCell.ColumnIndex;
+            var activity = m_settings.TrackedActivities.FirstOrDefault(a => selectedCell?.OwningRow.Tag as string == a);
+            if (activity != null)
+            {
+                var index = m_settings.TrackedActivities.IndexOf(activity);
+                m_settings.TrackedActivities.Remove(activity);
+                m_settings.TrackedActivities.Insert(index + (up ? -1 : +1), activity);
+
+                grdActivities.CurrentCellChanged -= grdActivities_CurrentCellChanged;
+                FillGrid();
+                var row = grdActivities.Rows.OfType<DataGridViewRow>().FirstOrDefault(r => r.Tag as string == activity);
+                if (row != null)
+                    row.Cells[column].Selected = true;
+                grdActivities.CurrentCellChanged += grdActivities_CurrentCellChanged;
+
+                UpdateEnabled();
             }
         }
     }

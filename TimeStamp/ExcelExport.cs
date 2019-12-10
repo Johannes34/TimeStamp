@@ -1,4 +1,5 @@
 ﻿using OfficeOpenXml;
+using OfficeOpenXml.Drawing.Chart;
 using OfficeOpenXml.Style;
 using System;
 using System.Collections.Generic;
@@ -44,9 +45,11 @@ namespace TimeStamp
             {
                 CreateExcelSheet(excel, year, i);
 
-                if (year == m_manager.Time.Today.Year && i == m_manager.Time.Today.Month)
+                if (year == TimeManager.Time.Today.Year && i == TimeManager.Time.Today.Month)
                     break;
             }
+
+            CreateSummarySheet(excel);
 
             var sfd = new SaveFileDialog();
             sfd.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -141,6 +144,64 @@ namespace TimeStamp
             }
         }
 
+        private void CreateSummarySheet(ExcelPackage excel)
+        {
+            var sheet = excel.Workbook.Worksheets.Add($"Statistiken");
+
+            // Write data:
+
+            int row = 2;
+            sheet.Cells[row, 1].Value = "Kalendarwoche";
+            sheet.Cells[row, 2].Value = "Überstunden";
+            sheet.Cells[row, 3].Value = "Durchschnittl. Ruhezeit";
+            row++;
+
+            sheet.Cells[row, 1].Value = "Soll:";
+            sheet.Cells[row, 2].Value = "~ 0h";
+            sheet.Cells[row, 3].Value = ">= 11h";
+            row++;
+
+            int dataRowStart = row;
+            var inclusiveMin = new DateTime(DateTime.Today.Year - 1, DateTime.Today.Month, DateTime.Today.Day);
+            var exclusiveMax = DateTime.Today;
+            var allStamps = m_manager.StampList.Where(s => s.Day >= inclusiveMin && s.Day < exclusiveMax).OrderBy(s => s.Day).GroupBy(s => $"KW{s.Day.GetWeekOfYearISO8601()}/{s.Day.Year}").ToArray();
+            foreach (var stamp in allStamps)
+            {
+                sheet.Cells[row, 1].Value = stamp.Key;
+                sheet.Cells[row, 2].Value = stamp.Sum(s => m_manager.DayBalance(s)).RoundToTotalQuarterHours();
+
+                var offworkTimes = new List<TimeSpan>();
+                for (int i = 0; i < stamp.Count() - 1; i++)
+                {
+                    if (stamp.ElementAt(i).Day.AddDays(1) == stamp.ElementAt(i + 1).Day)
+                        offworkTimes.Add((TimeSpan.FromHours(24) - stamp.ElementAt(i).End) + stamp.ElementAt(i + 1).Begin);
+                }
+                sheet.Cells[row, 3].Value = offworkTimes.Average(s => s).RoundToTotalQuarterHours();
+
+                row++;
+            }
+            row--;
+
+            // Create chart "Overtime per week":
+
+            ExcelChart chart = sheet.Drawings.AddChart("HourPerWeekChart", eChartType.Line);
+            chart.Title.Text = "Überstunden pro Woche (vergangenes Jahr)";
+            chart.SetPosition(1, 0, 7, 0);
+            chart.SetSize(800, 300);
+            var ser1 = (ExcelChartSerie)(chart.Series.Add(sheet.Cells[$"B{dataRowStart}:B{row}"], sheet.Cells[$"A{dataRowStart}:A{row}"]));
+            ser1.Header = "Ist";
+
+
+            // Create chart "Resting time per week":
+
+            chart = sheet.Drawings.AddChart("AvgOffWorkTimePerWeekChart", eChartType.Line);
+            chart.Title.Text = "Durchschn. Ruhezeiten pro Woche (vergangenes Jahr)";
+            chart.SetPosition(18, 0, 7, 0);
+            chart.SetSize(800, 300);
+            ser1 = (ExcelChartSerie)(chart.Series.Add(sheet.Cells[$"C{dataRowStart}:C{row}"], sheet.Cells[$"A{dataRowStart}:A{row}"]));
+            ser1.Header = "Ist";
+        }
+
         private double? GetTimeForExcelCell(Stamp stamp, string activity = null)
         {
             IEnumerable<ActivityRecord> activities = stamp.ActivityRecords;
@@ -148,28 +209,12 @@ namespace TimeStamp
             if (activity != null)
                 activities = activities.Where(r => r.Activity == activity);
 
-            var span = TimeSpan.FromMinutes(activities.Sum(r => m_manager.Total(r).TotalMinutes));
+            var span = TimeSpan.FromMinutes(activities.Sum(r => TimeManager.Total(r).TotalMinutes));
 
             if (span == TimeSpan.Zero)
                 return null; // String.Empty;
 
-            var hours = Math.Floor(span.TotalHours);
-            var fractional = span.TotalHours - hours;
-            // Minuten runden auf 
-            // 0.25 (viertelstunde): >= 7.5 && < 22.5
-            // 0.50 (halbestunde): >= 22.5 && < 
-            // 0.75 (dreiviertelstunde):
-            // 0.00 (ganze stunde):
-            if (fractional <= 0.125 || fractional > 0.875)
-                fractional = 0;
-            else if (fractional <= 0.375)
-                fractional = 0.25;
-            else if (fractional <= 0.625)
-                fractional = 0.50;
-            else if (fractional <= 0.875)
-                fractional = 0.75;
-
-            return hours + fractional;
+            return span.RoundToTotalQuarterHours();
             //return span.ToString("hh\\:mm");
         }
 

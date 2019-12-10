@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Xml.Serialization;
 
@@ -31,6 +33,20 @@ namespace TimeStamp
         public string Comment { get; set; }
         public int WorkingHours { get; set; }
 
+
+        public Stamp Clone()
+        {
+            using (MemoryStream memory_stream = new MemoryStream())
+            {
+                // Serialize the object into the memory stream.
+                BinaryFormatter formatter = new BinaryFormatter();
+                formatter.Serialize(memory_stream, this);
+
+                // Rewind the stream and use it to create a new object.
+                memory_stream.Position = 0;
+                return (Stamp)formatter.Deserialize(memory_stream);
+            }
+        }
 
         public List<ActivityRecord> ActivityRecords { get; set; }
 
@@ -80,6 +96,7 @@ namespace TimeStamp
 
     }
 
+    [Serializable]
     public class ActivityRecord
     {
         public string Activity { get; set; }

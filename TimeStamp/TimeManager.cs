@@ -82,6 +82,8 @@ namespace TimeStamp
                 throw new InvalidDataException("Today Stamp is null");
         }
 
+        public bool IsStamping { get; private set; } = false;
+
         public void ResumeStamping()
         {
             // assuming here that activity is null!
@@ -94,6 +96,8 @@ namespace TimeStamp
             // resuming from lunch break (insert pause parameter)..
 
             // find existing stamp for today:
+
+            IsStamping = true;
 
             var existing = StampList.SingleOrDefault(t => t.Day == Time.Today);
 
@@ -144,7 +148,8 @@ namespace TimeStamp
             if (TodayCurrentActivity == null)
                 StartNewActivity(Settings.AlwaysStartNewDayWithActivity ?? Settings.TrackedActivities.ElementAt(0), null);
 
-            PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity.Activity);
+            var previous = StampList.Where(s => s.Day < Today.Day).OrderByDescending(s => s.Day).FirstOrDefault();
+            PopupDialog.ShowCurrentlyTrackingActivityOnNewDay(TodayCurrentActivity.Activity, previous);
         }
 
         private bool RestoreLastActivity(Stamp today)
@@ -182,8 +187,8 @@ namespace TimeStamp
                         // last mouse movement time is 'master':
                         else
                         {
-                            pauseStartTime = GetTime(LastMouseMove);
-                            LastMouseMove = TimeSpan.Zero;
+                            pauseStartTime = GetTime(LastMouseMove.TimeOfDay); // should be on same day... ;-)
+                            LastMouseMove = default(DateTime);
 
                             last.End = pauseStartTime;
                             TodayCurrentActivity = last;
@@ -194,14 +199,14 @@ namespace TimeStamp
 
                         // ... and resume with a new activity now:
                         TodayCurrentActivity = null;
-                        StartNewActivity(last.Activity, last.Comment + " Resuming after pause...");
+                        StartNewActivity(last.Activity, last.Comment);
                         return true;
                     }
                     // the downtime is not considered a break:
                     // otherwise, if log off time since then was more than 7 minutes, create and start new activity record (better documented, as the end time of the 'relative longer' absence is not lost):
                     else if (GetNowTime() - last.End.Value > TimeSpan.FromMinutes(7))
                     {
-                        today.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime(), Comment = "logged off time" });
+                        today.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime() });
                         StartNewActivity(last.Activity, null);
                     }
                     // otherwise, assume this is a total unrelevant break, e.g. fetched a cup of coffee, went to toilet, so just resume that activity (end time is reset to null, ergo lost and not documented):
@@ -231,6 +236,15 @@ namespace TimeStamp
             TodayCurrentActivity = new ActivityRecord() { Activity = name, Begin = GetNowTime(), Comment = comment };
             Today.ActivityRecords.Add(TodayCurrentActivity);
 
+            // has checked out already (e.g. by deleting last 'open end' activity) -> reopen day by removing end time
+            // there shouldnt be any unrecoverable loss, as the end should be resembled by an according activity end time.
+            if (Today.End != default(TimeSpan))
+            {
+                Today.End = default(TimeSpan);
+                // it is also necessary to update the pause time:
+                CalculatePauseFromActivities(Today);
+            }
+
             CurrentActivityUpdated();
         }
 
@@ -244,17 +258,37 @@ namespace TimeStamp
 
             var unfinishedActivities = Today.ActivityRecords.Where(r => !r.End.HasValue);
             if (unfinishedActivities.Count() > 0)
-                throw new ArgumentOutOfRangeException($"There are {unfinishedActivities.Count()} simultaneously running activies: {String.Join(", ", unfinishedActivities.Select(a => a.Activity))}");
+            {
+                Log.Add($"There are {unfinishedActivities.Count()} simultaneously running activies: {String.Join(", ", unfinishedActivities.Select(a => a.Activity))}");
+            }
         }
 
-        public void SuspendStamping()
+        public void SuspendStamping(TimeSpan? explicitEndTime = null, bool considerLastMouseMove = false)
         {
+            if (considerLastMouseMove)
+            {
+                // To tackle the delayed firing of the suspend event:
+                if (LastMouseMove != default(DateTime) && LastMouseMove.Date == Today.Day)
+                {
+                    // TimeManager.Time.Now might as well be the next day in the morning....!!! In this case, always apply last mouse move time...
+                    // or if still same day: check if last mouse move longer ago than 5 minutes
+                    if (Today.Day != TimeManager.Time.Today || LastMouseMove.TimeOfDay < TimeManager.Time.Now.TimeOfDay - TimeSpan.FromMinutes(5))
+                    {
+                        // if yes -> provide last mouse move time to "SuspendStamping" method
+                        Log.Add($"No activity tracked since {FormatTimeSpan(LastMouseMove.TimeOfDay)}, setting days end to that time...");
+                        explicitEndTime = LastMouseMove.TimeOfDay;
+                    }
+                }
+            }
+
             // Set Todays End And Save Xml:
+
+            IsStamping = false;
 
             // update end time:
             // if end time has been inserted and is smaller than current end time, set new end time to 'now' (TODO: is this always desired? usually end time is empty anyway, except when explicitly provided...)
-            if (Today.Begin.TotalMinutes != 0 && Today.End.TotalMinutes < Time.Now.TimeOfDay.TotalMinutes)
-                Today.End = GetNowTime();
+            if (Today.Begin.TotalMinutes != 0 && (explicitEndTime.HasValue || Today.End.TotalMinutes < Time.Now.TimeOfDay.TotalMinutes))
+                Today.End = explicitEndTime ?? GetNowTime();
 
             FinishActivity(Today.End);
 
@@ -444,14 +478,14 @@ namespace TimeStamp
 
         // Timing:
 
-        public TimeProvider Time { get; set; } = new TimeProvider();
+        public static TimeProvider Time { get; set; } = new TimeProvider();
 
-        public TimeSpan GetNowTime()
+        public static TimeSpan GetNowTime()
         {
             return GetTime(Time.Now.TimeOfDay);
         }
 
-        public TimeSpan GetTime(TimeSpan accurate)
+        public static TimeSpan GetTime(TimeSpan accurate)
         {
             return new TimeSpan(accurate.Hours, accurate.Minutes, 0);
         }
@@ -482,7 +516,7 @@ namespace TimeStamp
                 return stamp.End.Subtract(stamp.Begin).Subtract(stamp.Pause);
         }
 
-        public TimeSpan Total(ActivityRecord activity)
+        public static TimeSpan Total(ActivityRecord activity)
         {
             if (!activity.Begin.HasValue)
                 return TimeSpan.Zero;
@@ -493,10 +527,18 @@ namespace TimeStamp
             return activity.End.Value - activity.Begin.Value;
         }
 
+        public bool HasMatchingActivityTimestamps(Stamp stamp, out string error)
+        {
+            var stampTime = DayTime(stamp);
+            var activityTime = TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(r => Total(r).TotalMinutes));
+            bool isMatching = stampTime == activityTime;
+            error = isMatching ? null : $"The sum value of the day stamps ({stampTime}) does not match with the sum value of the activities ({activityTime}).";
+            return isMatching;
+        }
 
         // Stamping:
 
-        public void SetBegin(Stamp stamp, TimeSpan value)
+        public static void SetBegin(Stamp stamp, TimeSpan value)
         {
             if (value < stamp.Begin)
             {
@@ -525,7 +567,7 @@ namespace TimeStamp
             stamp.Begin = value;
         }
 
-        public void SetEnd(Stamp stamp, TimeSpan value)
+        public static void SetEnd(Stamp stamp, TimeSpan value)
         {
             if (stamp.End != default(TimeSpan) && value > stamp.End)
             {
@@ -618,13 +660,174 @@ namespace TimeStamp
             stamp.Pause = value;
         }
 
-        public void CalculatePauseFromActivities(Stamp stamp)
+        public static void CalculatePauseFromActivities(Stamp stamp)
         {
-            if (stamp.End != TimeSpan.Zero)
+            //if (stamp.End != TimeSpan.Zero)
+            //{
+            //var workDuration = stamp.End - stamp.Begin;
+            //var activityDuration = TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => Total(a).TotalMinutes));
+            //stamp.Pause = workDuration > activityDuration ? workDuration - activityDuration : TimeSpan.Zero;
+            //}
+
+            if (stamp.ActivityRecords.Any())
             {
-                var workDuration = stamp.End - stamp.Begin;
-                var activityDuration = TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(a => Total(a).TotalMinutes));
-                stamp.Pause = workDuration > activityDuration ? workDuration - activityDuration : TimeSpan.Zero;
+                var ordered = stamp.ActivityRecords.OrderBy(r => r.Begin).ToList();
+
+                TimeSpan pauses = TimeSpan.Zero;
+                for (int i = 0; i < stamp.ActivityRecords.Count - 1; i++)
+                {
+                    // may be caused by 'SetPause':
+                    if (i == 0 && ordered.ElementAt(i).Begin.Value > stamp.Begin)
+                        pauses += ordered.ElementAt(i).Begin.Value - stamp.Begin;
+
+                    if (ordered.ElementAt(i).End.HasValue && ordered.ElementAt(i + 1).Begin.HasValue)
+                        pauses += (ordered.ElementAt(i + 1).Begin.Value - ordered.ElementAt(i).End.Value);
+                }
+                stamp.Pause = pauses;
+            }
+        }
+
+        public static void SetActivityBegin(Stamp stamp, ActivityRecord activity, TimeSpan value)
+        {
+            // invalid action:
+            if (value >= activity.End)
+                return;
+
+            // add new, pending activity entry if applicable:
+            if (!stamp.ActivityRecords.Contains(activity))
+                stamp.ActivityRecords.Add(activity);
+
+            var ordered = stamp.ActivityRecords.OrderBy(r => r.Begin).ToList();
+
+            // first activity start changed -> also change days start stamp
+            if (activity.Begin == stamp.Begin)
+            {
+                stamp.Begin = value;
+            }
+            // in between start changed -> also change end of previous activity, if they previously matched
+            else if (activity != ordered.FirstOrDefault())
+            {
+                int index = ordered.IndexOf(activity) - 1;
+
+                bool isIterating;
+                do
+                {
+                    isIterating = false;
+                    var previousActivity = ordered.ElementAt(index); //grdActivities.Rows[index].Tag as ActivityRecord;
+                    if (!previousActivity.End.HasValue || previousActivity.End.Value >= value)
+                    {
+                        previousActivity.End = value;
+                        // activity is hidden / negative after change -> remove activity
+                        if (Total(previousActivity) < TimeSpan.Zero)
+                        {
+                            stamp.ActivityRecords.Remove(previousActivity);
+                            if (index == 0)
+                            {
+                                // removed first stamp -> also set stamp begin
+                                stamp.Begin = value;
+                            }
+                            index--;
+                            isIterating = true;
+                        }
+                    }
+                } while (index >= 0 && isIterating);
+            }
+
+            activity.Begin = value;
+
+            // pause interruption gap(s) is/are changed -> also change day pause stamp
+            CalculatePauseFromActivities(stamp);
+        }
+
+        public static void SetActivityEnd(Stamp stamp, ActivityRecord activity, TimeSpan value)
+        {
+            // invalid action:
+            if (value <= activity.Begin)
+                return;
+
+            var ordered = stamp.ActivityRecords.OrderBy(r => r.Begin).ToList();
+
+            // last activity end changed -> also change days end stamp
+            if (activity.End == stamp.End)
+            {
+                stamp.End = value;
+            }
+            // in between end changed -> also change start of next activity, if they previously matched
+            else if (activity != ordered.LastOrDefault())
+            {
+                int index = ordered.IndexOf(activity) + 1;
+
+                bool isIterating;
+                do
+                {
+                    isIterating = false;
+                    var nextActivity = ordered.ElementAt(index);
+                    if (nextActivity.Begin <= value)
+                    {
+                        nextActivity.Begin = value;
+                        // activity is hidden / negative after change -> remove activity
+                        if (Total(nextActivity) < TimeSpan.Zero)
+                        {
+                            stamp.ActivityRecords.Remove(nextActivity);
+                            if (index == ordered.Count - 1)
+                            {
+                                // removed last stamp -> also set stamp end
+                                stamp.End = value;
+                            }
+                            index++;
+                            isIterating = true;
+                        }
+                    }
+                } while (index <= ordered.Count - 1 && isIterating);
+            }
+            activity.End = value;
+
+            // pause interruption gap(s) is/are changed -> also change day pause stamp
+            CalculatePauseFromActivities(stamp);
+        }
+
+        public bool CanDeleteActivity(Stamp stamp, ActivityRecord activity)
+        {
+            if (stamp.ActivityRecords.Count <= 1)
+                return false;
+            return true;
+        }
+
+        public void DeleteActivity(Stamp stamp, ActivityRecord activity)
+        {
+            if (activity == TodayCurrentActivity)
+            {
+                // todays end auf neuen letzten zeitpunkt setzen, current activity clearen:
+                stamp.ActivityRecords.Remove(activity);
+                TodayCurrentActivity = null;
+                var newLastActivity = stamp.GetLastActivity();
+                stamp.End = newLastActivity.End.Value;
+                // TODO: need to recalculate pause?
+                TimeManager.CalculatePauseFromActivities(stamp);
+            }
+            else if (activity == stamp.GetFirstActivity())
+            {
+                // update todays start time:
+                stamp.ActivityRecords.Remove(activity);
+                var newFirstActivity = stamp.GetFirstActivity();
+                stamp.Begin = newFirstActivity.Begin.Value;
+                // TODO: need to recalculate pause?
+                TimeManager.CalculatePauseFromActivities(stamp);
+            }
+            else if (activity == stamp.GetLastActivity())
+            {
+                // update todays end time:
+                stamp.ActivityRecords.Remove(activity);
+                var newLastActivity = stamp.GetLastActivity();
+                stamp.End = newLastActivity.End.Value;
+                // TODO: need to recalculate pause?
+                TimeManager.CalculatePauseFromActivities(stamp);
+            }
+            else
+            {
+                // in between activity; update todays pause time:
+                stamp.ActivityRecords.Remove(activity);
+                TimeManager.CalculatePauseFromActivities(stamp);
             }
         }
 
@@ -632,7 +835,7 @@ namespace TimeStamp
         // Pause Recognition:
 
 
-        public TimeSpan LastMouseMove { get; set; }
+        public DateTime LastMouseMove { get; set; }
 
         public bool IsInPauseTimeRecognitionMode
         {
@@ -664,7 +867,7 @@ namespace TimeStamp
                 else
                 {
                     // last mouse movement is known and qualifies in time span:
-                    if (LastMouseMove != TimeSpan.Zero && Time.Now.TimeOfDay.Subtract(LastMouseMove).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
+                    if (LastMouseMove != default(DateTime) && Time.Now.Day == LastMouseMove.Day && Time.Now.TimeOfDay.Subtract(LastMouseMove.TimeOfDay).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
                         return true;
                 }
 

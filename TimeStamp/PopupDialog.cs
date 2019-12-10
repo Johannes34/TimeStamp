@@ -46,7 +46,7 @@ namespace TimeStamp
         public static PopupDialog Show8HrsIn5Minutes(DateTime endingTime)
         {
             string text;
-            if (endingTime < Manager.Time.Now)
+            if (endingTime < TimeManager.Time.Now)
                 text = "Today's total was 8hrs...";
             else
                 text = "Today's total is 8hrs...";
@@ -72,6 +72,41 @@ namespace TimeStamp
         public static PopupDialog ShowCurrentlyTrackingActivity(string activity)
         {
             var diag = new PopupDialog(String.Format("Your currently tracking activity is: {0}", activity), null, TimeSpan.FromSeconds(8));
+            diag.StartShowing(DefaultOwner);
+            return diag;
+        }
+
+        public static PopupDialog ShowCurrentlyTrackingActivityOnNewDay(string activity, Stamp previousDay)
+        {
+            string greeting;
+            if (TimeManager.Time.Now.Hour < 11)
+                greeting = "Good morning";
+            else if (TimeManager.Time.Now.Hour < 13)
+                greeting = "Good noon";
+            else if (TimeManager.Time.Now.Hour < 18)
+                greeting = "Good afternoon";
+            else
+                greeting = "Good evening";
+
+            string message;
+            if (previousDay == null)
+            {
+                message = $"{greeting}! You are continuing with {activity}...";
+            }
+            else
+            {
+                string previous;
+                if (previousDay.Day == TimeManager.Time.Today.Subtract(TimeSpan.FromDays(1)))
+                    previous = "Yesterday";
+                else if (previousDay.Day > TimeManager.Time.Today.Subtract(TimeSpan.FromDays(7)))
+                    previous = $"Last {previousDay.Day.DayOfWeek.ToString()}";
+                else
+                    previous = "Last day";
+
+                message = $"{greeting}! {previous}'s working time was {Manager.FormatTimeSpan(Manager.DayTime(previousDay))}.{Environment.NewLine}You are continuing with {activity}...";
+            }
+
+            var diag = new PopupDialog(message, null, TimeSpan.FromSeconds(8));
             diag.StartShowing(DefaultOwner);
             return diag;
         }
@@ -124,7 +159,7 @@ namespace TimeStamp
         {
             if (DisplayCountdown.HasValue)
             {
-                var remaining = DisplayCountdown.Value - Manager.Time.Now;
+                var remaining = DisplayCountdown.Value - TimeManager.Time.Now;
                 if (remaining > TimeSpan.Zero)
                     return String.Format(@"... in {0:hh\:mm\:ss} minutes", remaining);
                 else if (remaining == TimeSpan.Zero)
@@ -176,7 +211,7 @@ namespace TimeStamp
             base.Show(owner);
             System.Media.SystemSounds.Hand.Play();
 
-            m_openedTime = Manager.Time.Now;
+            m_openedTime = TimeManager.Time.Now;
             new Task(() =>
             {
                 while ((bool)this.Invoke(new Func<bool>(() => this.Opacity < 1)))
@@ -228,7 +263,7 @@ namespace TimeStamp
         {
             if (ShowDuration.HasValue)
             {
-                if (Manager.Time.Now > m_openedTime + ShowDuration.Value)
+                if (TimeManager.Time.Now > m_openedTime + ShowDuration.Value)
                 {
                     this.StartClosing();
                 }

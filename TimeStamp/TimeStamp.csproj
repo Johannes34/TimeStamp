@@ -63,6 +63,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ExcelExport.cs" />
+    <Compile Include="Extensions.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -91,6 +92,12 @@
     </Compile>
     <Compile Include="Stamp.cs" />
     <Compile Include="Log.cs" />
+    <Compile Include="TimelineControl.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="TimelineControl.Designer.cs">
+      <DependentUpon>TimelineControl.cs</DependentUpon>
+    </Compile>
     <Compile Include="TimeManager.cs" />
     <Compile Include="TimeProvider.cs" />
     <Compile Include="TimeSettings.cs" />
@@ -115,6 +122,9 @@
     </Compile>
     <EmbeddedResource Include="Settings.resx">
       <DependentUpon>Settings.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="TimelineControl.resx">
+      <DependentUpon>TimelineControl.cs</DependentUpon>
     </EmbeddedResource>
     <None Include="app.config" />
     <None Include="packages.config" />
