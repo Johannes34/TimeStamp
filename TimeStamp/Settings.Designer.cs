@@ -31,16 +31,20 @@
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Settings));
             this.groupBox1 = new System.Windows.Forms.GroupBox();
-            this.label2 = new System.Windows.Forms.Label();
-            this.txtMinimumPauseMinutes = new System.Windows.Forms.TextBox();
-            this.label3 = new System.Windows.Forms.Label();
-            this.txtMinimumPauseStart = new System.Windows.Forms.TextBox();
-            this.label4 = new System.Windows.Forms.Label();
-            this.txtMaximumPauseEnd = new System.Windows.Forms.TextBox();
             this.label5 = new System.Windows.Forms.Label();
+            this.txtMaximumPauseEnd = new System.Windows.Forms.TextBox();
+            this.label4 = new System.Windows.Forms.Label();
+            this.txtMinimumPauseStart = new System.Windows.Forms.TextBox();
+            this.label3 = new System.Windows.Forms.Label();
+            this.txtMinimumPauseMinutes = new System.Windows.Forms.TextBox();
+            this.label2 = new System.Windows.Forms.Label();
             this.cbComputerIsLockedWhenLeaving = new System.Windows.Forms.CheckBox();
             this.cbEnablePauseRec = new System.Windows.Forms.CheckBox();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.txtDefaultHoursSo = new System.Windows.Forms.TextBox();
+            this.label7 = new System.Windows.Forms.Label();
+            this.txtDefaultHoursSa = new System.Windows.Forms.TextBox();
+            this.label6 = new System.Windows.Forms.Label();
             this.btnManageActivities = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
             this.txtDefaultHours = new System.Windows.Forms.TextBox();
@@ -68,46 +72,28 @@
             this.groupBox1.Controls.Add(this.cbEnablePauseRec);
             this.groupBox1.Location = new System.Drawing.Point(12, 99);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(638, 86);
+            this.groupBox1.Size = new System.Drawing.Size(638, 89);
             this.groupBox1.TabIndex = 0;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Automatic Pause Recognition";
             // 
-            // label2
+            // label5
             // 
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(29, 39);
-            this.label2.MinimumSize = new System.Drawing.Size(0, 20);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(287, 20);
-            this.label2.TabIndex = 35;
-            this.label2.Text = "Set Pause time automatically, when being idle for more than";
-            this.label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.label5.AutoSize = true;
+            this.label5.Location = new System.Drawing.Point(610, 41);
+            this.label5.MinimumSize = new System.Drawing.Size(0, 20);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(10, 20);
+            this.label5.TabIndex = 42;
+            this.label5.Text = ".";
+            this.label5.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // txtMinimumPauseMinutes
+            // txtMaximumPauseEnd
             // 
-            this.txtMinimumPauseMinutes.Location = new System.Drawing.Point(322, 40);
-            this.txtMinimumPauseMinutes.Name = "txtMinimumPauseMinutes";
-            this.txtMinimumPauseMinutes.Size = new System.Drawing.Size(41, 20);
-            this.txtMinimumPauseMinutes.TabIndex = 36;
-            // 
-            // label3
-            // 
-            this.label3.AutoSize = true;
-            this.label3.Location = new System.Drawing.Point(369, 40);
-            this.label3.MinimumSize = new System.Drawing.Size(0, 20);
-            this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(87, 20);
-            this.label3.TabIndex = 38;
-            this.label3.Text = "minutes between";
-            this.label3.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            // 
-            // txtMinimumPauseStart
-            // 
-            this.txtMinimumPauseStart.Location = new System.Drawing.Point(462, 41);
-            this.txtMinimumPauseStart.Name = "txtMinimumPauseStart";
-            this.txtMinimumPauseStart.Size = new System.Drawing.Size(52, 20);
-            this.txtMinimumPauseStart.TabIndex = 39;
+            this.txtMaximumPauseEnd.Location = new System.Drawing.Point(551, 41);
+            this.txtMaximumPauseEnd.Name = "txtMaximumPauseEnd";
+            this.txtMaximumPauseEnd.Size = new System.Drawing.Size(53, 20);
+            this.txtMaximumPauseEnd.TabIndex = 41;
             // 
             // label4
             // 
@@ -120,23 +106,41 @@
             this.label4.Text = "and";
             this.label4.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // txtMaximumPauseEnd
+            // txtMinimumPauseStart
             // 
-            this.txtMaximumPauseEnd.Location = new System.Drawing.Point(551, 41);
-            this.txtMaximumPauseEnd.Name = "txtMaximumPauseEnd";
-            this.txtMaximumPauseEnd.Size = new System.Drawing.Size(53, 20);
-            this.txtMaximumPauseEnd.TabIndex = 41;
+            this.txtMinimumPauseStart.Location = new System.Drawing.Point(462, 41);
+            this.txtMinimumPauseStart.Name = "txtMinimumPauseStart";
+            this.txtMinimumPauseStart.Size = new System.Drawing.Size(52, 20);
+            this.txtMinimumPauseStart.TabIndex = 39;
             // 
-            // label5
+            // label3
             // 
-            this.label5.AutoSize = true;
-            this.label5.Location = new System.Drawing.Point(610, 41);
-            this.label5.MinimumSize = new System.Drawing.Size(0, 20);
-            this.label5.Name = "label5";
-            this.label5.Size = new System.Drawing.Size(10, 20);
-            this.label5.TabIndex = 42;
-            this.label5.Text = ".";
-            this.label5.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.label3.AutoSize = true;
+            this.label3.Location = new System.Drawing.Point(369, 40);
+            this.label3.MinimumSize = new System.Drawing.Size(0, 20);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(87, 20);
+            this.label3.TabIndex = 38;
+            this.label3.Text = "minutes between";
+            this.label3.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // txtMinimumPauseMinutes
+            // 
+            this.txtMinimumPauseMinutes.Location = new System.Drawing.Point(322, 40);
+            this.txtMinimumPauseMinutes.Name = "txtMinimumPauseMinutes";
+            this.txtMinimumPauseMinutes.Size = new System.Drawing.Size(41, 20);
+            this.txtMinimumPauseMinutes.TabIndex = 36;
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(29, 39);
+            this.label2.MinimumSize = new System.Drawing.Size(0, 20);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(287, 20);
+            this.label2.TabIndex = 35;
+            this.label2.Text = "Set Pause time automatically, when being idle for more than";
+            this.label2.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // cbComputerIsLockedWhenLeaving
             // 
@@ -155,15 +159,19 @@
             this.cbEnablePauseRec.CheckState = System.Windows.Forms.CheckState.Checked;
             this.cbEnablePauseRec.Location = new System.Drawing.Point(12, 19);
             this.cbEnablePauseRec.Name = "cbEnablePauseRec";
-            this.cbEnablePauseRec.Size = new System.Drawing.Size(206, 17);
+            this.cbEnablePauseRec.Size = new System.Drawing.Size(333, 17);
             this.cbEnablePauseRec.TabIndex = 33;
-            this.cbEnablePauseRec.Text = "Enable Automatic Pause Recognition";
+            this.cbEnablePauseRec.Text = "Enable Automatic Lunch Break Recognition (once per day)";
             this.cbEnablePauseRec.UseVisualStyleBackColor = true;
             // 
             // groupBox2
             // 
             this.groupBox2.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+            this.groupBox2.Controls.Add(this.txtDefaultHoursSo);
+            this.groupBox2.Controls.Add(this.label7);
+            this.groupBox2.Controls.Add(this.txtDefaultHoursSa);
+            this.groupBox2.Controls.Add(this.label6);
             this.groupBox2.Controls.Add(this.btnManageActivities);
             this.groupBox2.Controls.Add(this.label1);
             this.groupBox2.Controls.Add(this.txtDefaultHours);
@@ -173,6 +181,38 @@
             this.groupBox2.TabIndex = 1;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "General";
+            // 
+            // txtDefaultHoursSo
+            // 
+            this.txtDefaultHoursSo.Location = new System.Drawing.Point(394, 24);
+            this.txtDefaultHoursSo.Name = "txtDefaultHoursSo";
+            this.txtDefaultHoursSo.Size = new System.Drawing.Size(35, 20);
+            this.txtDefaultHoursSo.TabIndex = 39;
+            // 
+            // label7
+            // 
+            this.label7.AutoSize = true;
+            this.label7.Location = new System.Drawing.Point(342, 27);
+            this.label7.Name = "label7";
+            this.label7.Size = new System.Drawing.Size(46, 13);
+            this.label7.TabIndex = 38;
+            this.label7.Text = "Sunday:";
+            // 
+            // txtDefaultHoursSa
+            // 
+            this.txtDefaultHoursSa.Location = new System.Drawing.Point(301, 24);
+            this.txtDefaultHoursSa.Name = "txtDefaultHoursSa";
+            this.txtDefaultHoursSa.Size = new System.Drawing.Size(35, 20);
+            this.txtDefaultHoursSa.TabIndex = 37;
+            // 
+            // label6
+            // 
+            this.label6.AutoSize = true;
+            this.label6.Location = new System.Drawing.Point(243, 27);
+            this.label6.Name = "label6";
+            this.label6.Size = new System.Drawing.Size(52, 13);
+            this.label6.TabIndex = 36;
+            this.label6.Text = "Saturday:";
             // 
             // btnManageActivities
             // 
@@ -189,13 +229,13 @@
             this.label1.AutoSize = true;
             this.label1.Location = new System.Drawing.Point(9, 27);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(151, 13);
+            this.label1.Size = new System.Drawing.Size(187, 13);
             this.label1.TabIndex = 1;
-            this.label1.Text = "Default working hours per day:";
+            this.label1.Text = "Default working hours per day (Mo-Fr):";
             // 
             // txtDefaultHours
             // 
-            this.txtDefaultHours.Location = new System.Drawing.Point(166, 24);
+            this.txtDefaultHours.Location = new System.Drawing.Point(202, 24);
             this.txtDefaultHours.Name = "txtDefaultHours";
             this.txtDefaultHours.Size = new System.Drawing.Size(35, 20);
             this.txtDefaultHours.TabIndex = 0;
@@ -206,9 +246,9 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBox3.Controls.Add(this.cbRemindVpn);
             this.groupBox3.Controls.Add(this.txtVpnName);
-            this.groupBox3.Location = new System.Drawing.Point(12, 191);
+            this.groupBox3.Location = new System.Drawing.Point(12, 194);
             this.groupBox3.Name = "groupBox3";
-            this.groupBox3.Size = new System.Drawing.Size(638, 56);
+            this.groupBox3.Size = new System.Drawing.Size(638, 52);
             this.groupBox3.TabIndex = 2;
             this.groupBox3.TabStop = false;
             this.groupBox3.Text = "Notifications";
@@ -276,5 +316,9 @@
         private System.Windows.Forms.TextBox txtVpnName;
         private System.Windows.Forms.ToolTip toolTip1;
         public System.Windows.Forms.Button btnManageActivities;
+        private System.Windows.Forms.TextBox txtDefaultHoursSo;
+        private System.Windows.Forms.Label label7;
+        private System.Windows.Forms.TextBox txtDefaultHoursSa;
+        private System.Windows.Forms.Label label6;
     }
 }

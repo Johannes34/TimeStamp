@@ -53,6 +53,12 @@ namespace TimeStamp
 
         public double MaximumValue { get; set; }
 
+        public bool DrawSectionDisplayTexts { get; set; }
+
+        public bool AddSectionMode { get; set; } = false;
+
+        public Dictionary<string, double> CustomSectionDisplayTexts { get; private set; } = new Dictionary<string, double>();
+
         private double CalculatePercentLocation(double actualValue)
         {
             if (actualValue <= MinimumValue)
@@ -68,7 +74,7 @@ namespace TimeStamp
             return MinimumValue + (percentLocation * (MaximumValue - MinimumValue));
         }
 
-        // Themeing:
+        // Theming:
 
         public Color EdgeColor { get; set; } = Color.Black;
         public Color HighlightEdgeColor { get; set; } = Color.Black;
@@ -130,22 +136,53 @@ namespace TimeStamp
 
         private Pen GetPen(TimelineSection section, TimelineSectionComponents component)
         {
-            return new Pen(GetForeColor(section, component), TimelineThickness);
+            switch (section.Style)
+            {
+                case DrawingStyle.Solid:
+                    return new Pen(GetForeColor(section, component), TimelineThickness);
+                case DrawingStyle.Twisted:
+                    var tileImg = new Bitmap(TimelineThickness, TimelineThickness);
+                    var grp = Graphics.FromImage(tileImg);
+                    var color = GetForeColor(section, component);
+                    grp.FillRectangle(Brushes.Transparent, new RectangleF(0, 0, TimelineThickness, TimelineThickness));
+                    int x = -TimelineThickness / 2;
+                    int distance = TimelineThickness;
+                    int top = 0;
+                    int bot = TimelineThickness;
+                    for (int i = 0; i < 3; i++)
+                        grp.DrawLine(new Pen(color, 1), x + i * (TimelineThickness / 2), top, x + i * (TimelineThickness / 2) + distance, bot);
+                    var twistedPen = new Pen(new TextureBrush(tileImg, System.Drawing.Drawing2D.WrapMode.Tile), TimelineThickness);
+                    return twistedPen;
+                default:
+                    throw new NotImplementedException();
+            }
         }
 
         private int GetTimelineY()
         {
-            return Padding.Top + (Math.Max(MajorTicklineSize.Height, MinorTicklineSize.Height) + 1) / 2;
+            return Padding.Top + (DrawSectionDisplayTexts ? TextRenderer.MeasureText("Test", Font).Height : 0) + (Math.Max(MajorTicklineSize.Height, MinorTicklineSize.Height) + 1) / 2;
         }
 
-        private int CalculateX(double actualValue)
+        public int TimelineY => GetTimelineY();
+
+        public int CalculateX(double actualValue)
         {
             return (int)(Padding.Left + (Width - Padding.Horizontal) * CalculatePercentLocation(actualValue));
         }
 
+        public double CalculateValue(int x)
+        {
+            var percentPos = (x - Padding.Left) / (double)(Width - Padding.Horizontal);
+            return CalculateActualValue(percentPos);
+        }
+
         private Point GetStartPoint(TimelineSection section)
         {
-            int startX = CalculateX(section.Start.Value);
+            return GetStartPoint(section.Start);
+        }
+        private Point GetStartPoint(TimelineLocation separator)
+        {
+            int startX = CalculateX(separator.Value);
             int y = GetTimelineY();
 
             return new Point(startX, y);
@@ -187,6 +224,8 @@ namespace TimeStamp
         {
             var collection = (DraggedSectionsPreview ?? Sections);
             var index = collection.IndexOf(point.OfSection);
+            if (index == -1)
+                return false;
             if (point == point.OfSection.Start)
             {
                 return index == 0 || (collection[index - 1].End.DisplayText != point.DisplayText || collection[index - 1].TooltipHeader != point.OfSection.TooltipHeader);
@@ -201,37 +240,71 @@ namespace TimeStamp
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            if ((DraggedSectionsPreview ?? Sections).Any())
+            var sectionsToDraw = DraggedSectionsPreview ?? Sections;
+
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+
+            List<RectangleF> drawnTextAreas = new List<RectangleF>();
+
+            // draw pending add section item:
+            if (AddSectionMode && !double.IsNaN(CurrentMousePosition))
             {
-                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                var x = CalculateX(CurrentMousePosition);
+                int height = (int)(TimelineThickness / 1.2);
 
-                List<RectangleF> drawnTextAreas = new List<RectangleF>();
-
-                // draw mouse cursor position display text
-                if (DrawDisplayTexts && !double.IsNaN(CurrentMousePosition))//&& !(DraggedSectionsPreview ?? Sections).Any(s => s.MouseOver == TimelineSectionComponents.StartSeparator || s.MouseOver == TimelineSectionComponents.EndSeparator))
+                if (!double.IsNaN(AddSectionStartMousePosition))
                 {
-                    var x = CalculateX(CurrentMousePosition);
-                    //e.Graphics.DrawLine(new Pen(SystemColors.GrayText, 1) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dot }, x, Padding.Top, x, Height - Padding.Vertical);
-                    var text = TimeSpan.FromMinutes(CurrentMousePosition).ToString("hh\\:mm");
-                    DrawSeparatorText(e, text, new Point(x, GetTimelineY()), true, drawnTextAreas, EdgeColor);
+                    var endX = CalculateX(AddSectionStartMousePosition);
+                    e.Graphics.DrawRectangle(new Pen(ForeColor, EmptyTimelineThickness), Math.Min(x, endX), GetTimelineY() - height, Math.Max(x, endX) - Math.Min(x, endX), 2 * height);
+                }
+                else if (!IsMouseOverAnyTimelineElement)
+                {
+                    e.Graphics.DrawLine(new Pen(ForeColor, EmptyTimelineThickness), x, GetTimelineY() - height, x, GetTimelineY() + height);
+                }
+            }
+
+            // draw mouse cursor position display text
+            if (DrawDisplayTexts && !double.IsNaN(CurrentMousePosition))
+            {
+                var x = CalculateX(CurrentMousePosition);
+                var text = TimeSpan.FromMinutes(CurrentMousePosition).ToString("hh\\:mm");
+                DrawSeparatorText(e, text, new Point(x, GetTimelineY()), true, drawnTextAreas, EdgeColor);
+            }
+
+            // draw empty timeline:
+            if (EmptyTimelineThickness > 0)
+            {
+                e.Graphics.DrawLine(new Pen(ForeColor, EmptyTimelineThickness), Padding.Left, GetTimelineY(), Width - Padding.Horizontal, GetTimelineY());
+            }
+
+            if (sectionsToDraw.Any())
+            {
+                // draw section display texts (above timeline):
+                if (DrawSectionDisplayTexts)
+                {
+                    Dictionary<string, RectangleF> drawnSectionDisplayTexts = new Dictionary<string, RectangleF>();
+                    var sectionTexts = sectionsToDraw.Select(s => new Tuple<string, int, Color>(s.DisplayText, GetStartPoint(s).X, s.ForeColor));
+                    var customTexts = CustomSectionDisplayTexts.Select(s => new Tuple<string, int, Color>(s.Key, CalculateX(s.Value), ForeColor));
+                    var allTexts = sectionTexts.Concat(customTexts).OrderBy(t => t.Item2).ToArray();
+                    foreach (var text in allTexts)
+                    {
+                        if (!String.IsNullOrWhiteSpace(text.Item1) && !drawnSectionDisplayTexts.ContainsKey(text.Item1))
+                        {
+                            var nextFreeX = drawnSectionDisplayTexts.Any() ? (int)drawnSectionDisplayTexts.Max(t => t.Value.Right) : 0;
+                            var textPoint = new Point(Math.Max(text.Item2, nextFreeX), Padding.Top);
+                            var textBounds = new RectangleF(textPoint, e.Graphics.MeasureString(text.Item1, Font));
+                            using (var b = new SolidBrush(text.Item3))
+                            {
+                                e.Graphics.DrawString(text.Item1, Font, b, textBounds);
+                            }
+                            drawnSectionDisplayTexts.Add(text.Item1, textBounds);
+                        }
+                    }
                 }
 
-                if (EmptyTimelineThickness > 0)
-                {
-                    e.Graphics.DrawLine(new Pen(ForeColor, EmptyTimelineThickness), Padding.Left, GetTimelineY(), Width - Padding.Horizontal, GetTimelineY());
-                }
-
-
-                // TODO: Prioritize nodes (draw and reserve space first):
-                // - dragged node
-                // - highlighted node
-                // - start node
-                // - end node
-                // - node before pause
-                // - node after pause
-
-                foreach (var section in (DraggedSectionsPreview ?? Sections).OrderBy(s => s.Start.Value))
+                // draw sections and separators:
+                foreach (var section in sectionsToDraw.OrderBy(s => s.Start.Value))
                 {
                     var start = GetStartPoint(section);
                     var end = GetEndPoint(section);
@@ -241,11 +314,17 @@ namespace TimeStamp
                     DrawSeparator(e, section, TimelineSectionComponents.StartSeparator);
 
                     DrawSeparator(e, section, TimelineSectionComponents.EndSeparator);
+                }
 
-                    if (DrawDisplayTexts)
+                // draw separator texts:
+                if (DrawDisplayTexts)
+                {
+                    // Order/priorization of drawn separator texts (order of texts being draw and reserving space first):
+                    foreach (var separator in sectionsToDraw.SelectMany(s => new[] { s.Start, s.End }).Where(s => s != null).OrderByDescending(s => s.DisplayTextOrder).ThenBy(s => s.Value))
                     {
-                        DrawSeparatorText(e, section.Start.DisplayText, start, IsMajorTickline(section.Start), drawnTextAreas, EdgeColor);
-                        DrawSeparatorText(e, section.End.DisplayText, end, IsMajorTickline(section.End), drawnTextAreas, EdgeColor);
+                        var start = GetStartPoint(separator);
+
+                        DrawSeparatorText(e, separator.DisplayText, start, IsMajorTickline(separator), drawnTextAreas, EdgeColor);
                     }
                 }
             }
@@ -348,20 +427,23 @@ namespace TimeStamp
         // Mouse Over:
 
         private double CurrentMousePosition { get; set; } = double.NaN;
+        private bool IsMouseOverAnyTimelineElement { get; set; }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
+            if (!double.IsNaN(AddSectionStartMousePosition) && e.Button == MouseButtons.None)
+                AddSectionStartMousePosition = double.NaN;
+
+            // show current mouse position value:
+            var val = CalculateValue(e.Location.X);
+            if (CurrentMousePosition != val)
+            {
+                CurrentMousePosition = val;
+                Invalidate();
+            }
+
             if (Sections.Any())
             {
-                // show current mouse position value:
-                var percentPos = (e.Location.X - Padding.Left) / (double)(Width - Padding.Horizontal);
-                var val = CalculateActualValue(percentPos);
-                if (CurrentMousePosition != val)
-                {
-                    CurrentMousePosition = val;
-                    Invalidate();
-                }
-
                 if (Drag(e, false))
                     return;
                 else
@@ -379,7 +461,7 @@ namespace TimeStamp
                             {
                                 section.MouseOver = TimelineSectionComponents.StartSeparator;
                                 Invalidate();
-                                toolTip1.Show($"{section.Start.DisplayText}{Environment.NewLine}{section.TooltipHeader}{Environment.NewLine}{section.TooltipBody}", this, start.Left, start.Top - 50);
+                                toolTip1.Show($"{section.Start.DisplayText}{Environment.NewLine}{section.TooltipHeader}{Environment.NewLine}{section.TooltipBody}", this, start.Left, this.Height /*start.Top - 50*/);
                             }
                         }
                         else if (section.End.IsVisible && end.Contains(e.Location))
@@ -388,7 +470,7 @@ namespace TimeStamp
                             {
                                 section.MouseOver = TimelineSectionComponents.EndSeparator;
                                 Invalidate();
-                                toolTip1.Show($"{section.End.DisplayText}{Environment.NewLine}{section.TooltipHeader}{Environment.NewLine}{section.TooltipBody}", this, end.Left, end.Top - 50);
+                                toolTip1.Show($"{section.End.DisplayText}{Environment.NewLine}{section.TooltipHeader}{Environment.NewLine}{section.TooltipBody}", this, end.Left, this.Height /*end.Top - 50*/);
                             }
                         }
                         else if (line.Contains(e.Location))
@@ -398,7 +480,7 @@ namespace TimeStamp
                                 section.MouseOver = TimelineSectionComponents.Line;
                                 Invalidate();
                                 string duration = String.IsNullOrEmpty(section.TooltipDurationCustomText) ? $"{section.Start.DisplayText} - {section.End.DisplayText}" : section.TooltipDurationCustomText;
-                                toolTip1.Show($"{duration}{Environment.NewLine}{section.TooltipHeader}{Environment.NewLine}{section.TooltipBody}", this, line.Left + line.Width / 2, start.Top - 50);
+                                toolTip1.Show($"{duration}{Environment.NewLine}{section.TooltipHeader}{Environment.NewLine}{section.TooltipBody}", this, line.Left + line.Width / 2, this.Height /*start.Top - 50*/);
                             }
                         }
                         else
@@ -407,9 +489,14 @@ namespace TimeStamp
                             {
                                 section.MouseOver = TimelineSectionComponents.None;
                                 Invalidate();
-                                toolTip1.Hide(this);
                             }
                         }
+                    }
+
+                    IsMouseOverAnyTimelineElement = Sections.Any(s => s.MouseOver != TimelineSectionComponents.None);
+                    if (!IsMouseOverAnyTimelineElement)
+                    {
+                        toolTip1.Hide(this);
                     }
                 }
             }
@@ -434,20 +521,21 @@ namespace TimeStamp
             if (DraggedItem == null)
                 return false;
 
-            var percentPos = (e.Location.X - Padding.Left) / (double)(Width - Padding.Horizontal);
-            var newActualPos = CalculateActualValue(percentPos);
+            var newActualPos = CalculateValue(e.Location.X);
 
             // Dragging:
-            if (DraggedItem is TimelineLocation loc && OnDragSeparator != null)
+            if (DraggedItem.OfType<TimelineLocation>().Any() && OnDragSeparator != null)
             {
-                DraggedSectionsPreview = OnDragSeparator(loc, newActualPos, loc == loc.OfSection.Start, commitChange);
+                var end = DraggedItem.OfType<TimelineLocation>().FirstOrDefault(l => l.OfSection.End == l);
+                var start = DraggedItem.OfType<TimelineLocation>().FirstOrDefault(l => l.OfSection.Start == l);
+                DraggedSectionsPreview = OnDragSeparator(this, end, start, newActualPos, commitChange);
             }
-            else if (DraggedItem is TimelineSection sec && OnDragSection != null)
+            else if (DraggedItem.OfType<TimelineSection>().Any() && OnDragSection != null)
             {
-                var percentStartPos = (DragStartLocation.X - Padding.Left) / (double)(Width - Padding.Horizontal);
-                var actualStarPos = CalculateActualValue(percentStartPos);
+                var actualStarPos = CalculateValue(DragStartLocation.X);
 
-                DraggedSectionsPreview = OnDragSection(sec, newActualPos - actualStarPos, commitChange);
+                var sec = DraggedItem.OfType<TimelineSection>().First();
+                DraggedSectionsPreview = OnDragSection(this, sec, newActualPos - actualStarPos, commitChange);
             }
 
             if (commitChange)
@@ -458,44 +546,58 @@ namespace TimeStamp
             return true;
         }
 
-        public delegate List<TimelineSection> DragSeparatorPreview(TimelineLocation draggedSeparator, double newPosition, bool isStartSeparator, bool commitPreview);
-        public delegate List<TimelineSection> DragSectionPreview(TimelineSection draggedSection, double offsetValue, bool commitPreview);
+        public delegate List<TimelineSection> DragSeparatorPreview(TimelineControl sender, TimelineLocation draggedEndSeparator, TimelineLocation draggedStartSeparator, double newPosition, bool commitPreview);
+        public delegate List<TimelineSection> DragSectionPreview(TimelineControl sender, TimelineSection draggedSection, double offsetValue, bool commitPreview);
         public DragSeparatorPreview OnDragSeparator { get; set; }
         public DragSectionPreview OnDragSection { get; set; }
 
-        private IThemed DraggedItem { get; set; }
+        private List<IThemed> DraggedItem { get; set; }
 
         private Point DragStartLocation { get; set; }
 
         private List<TimelineSection> DraggedSectionsPreview { get; set; }
 
+        private double AddSectionStartMousePosition { get; set; } = double.NaN;
+
         protected override void OnMouseDown(MouseEventArgs e)
         {
-            if (Sections.Any() && e.Button == MouseButtons.Left)
+            if (e.Button == MouseButtons.Left)
             {
-                foreach (var section in Sections)
+                if (AddSectionMode && !IsMouseOverAnyTimelineElement)
                 {
-                    var start = GetStartBounds(section);
-                    var end = GetEndBounds(section);
-                    var line = GetLineBounds(section);
+                    AddSectionStartMousePosition = CalculateValue(e.Location.X);
+                }
 
-                    if (start.Contains(e.Location))
+                if (Sections.Any())
+                {
+                    var dragged = new List<IThemed>();
+                    foreach (var section in Sections)
                     {
-                        DraggedItem = section.Start;
-                        DragStartLocation = e.Location;
-                        Debug.WriteLine($"Mouse Down on Start Point {section.Start.DisplayText} of '{section.TooltipHeader}'");
+                        var start = GetStartBounds(section);
+                        var end = GetEndBounds(section);
+                        var line = GetLineBounds(section);
+
+                        if (start.Contains(e.Location))
+                        {
+                            dragged.Add(section.Start);
+                            Debug.WriteLine($"Mouse Down on Start Point {section.Start.DisplayText} of '{section.TooltipHeader}'");
+                        }
+                        else if (section.End.IsVisible && end.Contains(e.Location))
+                        {
+                            dragged.Add(section.End);
+                            Console.WriteLine($"Mouse Down on End Point {section.End.DisplayText} of '{section.TooltipHeader}'");
+                        }
+                        else if (line.Contains(e.Location))
+                        {
+                            dragged.Add(section);
+                            Console.WriteLine($"Mouse Down on Line of '{section.TooltipHeader}'");
+                        }
                     }
-                    else if (section.End.IsVisible && end.Contains(e.Location))
+
+                    if (dragged.Any())
                     {
-                        DraggedItem = section.End;
+                        DraggedItem = dragged;
                         DragStartLocation = e.Location;
-                        Console.WriteLine($"Mouse Down on End Point {section.End.DisplayText} of '{section.TooltipHeader}'");
-                    }
-                    else if (line.Contains(e.Location))
-                    {
-                        DraggedItem = section;
-                        DragStartLocation = e.Location;
-                        Console.WriteLine($"Mouse Down on Line of '{section.TooltipHeader}'");
                     }
                 }
             }
@@ -505,14 +607,23 @@ namespace TimeStamp
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
-            if (DraggedItem != null && e.Button == MouseButtons.Left)
+            if (e.Button == MouseButtons.Left)
             {
-                // Commit changes:
-                Drag(e, true);
+                if (DraggedItem != null)
+                {
+                    // Commit changes:
+                    Drag(e, true);
 
-                DraggedItem = null;
-                DraggedSectionsPreview = null;
-                DragStartLocation = Point.Empty;
+                    DraggedItem = null;
+                    DraggedSectionsPreview = null;
+                    DragStartLocation = Point.Empty;
+                }
+
+                if (AddSectionMode && !double.IsNaN(AddSectionStartMousePosition))
+                {
+                    OnAddSection?.Invoke(this, Math.Min(CurrentMousePosition, AddSectionStartMousePosition), Math.Max(CurrentMousePosition, AddSectionStartMousePosition), e);
+                }
+                AddSectionStartMousePosition = double.NaN;
 
                 Invalidate();
             }
@@ -536,21 +647,33 @@ namespace TimeStamp
 
         // Other Mouse Interaction:
 
-        public delegate void SectionClick(TimelineSection clickedSection, MouseEventArgs e, double clickedPosition);
+        public delegate void SectionClick(TimelineControl sender, TimelineSection clickedSection, MouseEventArgs e, double clickedPosition);
         public SectionClick OnSectionClicked { get; set; }
+
+
+        public delegate void SeparatorClick(TimelineControl sender, TimelineSection clickedEndSeparator, TimelineSection clickedStartSeparator, MouseEventArgs e, double clickedPosition);
+        public SeparatorClick OnSeparatorClicked { get; set; }
+
+
+        public delegate void AddSectionHandler(TimelineControl sender, double start, double end, MouseEventArgs e);
+        public AddSectionHandler OnAddSection { get; set; }
 
         protected override void OnMouseClick(MouseEventArgs e)
         {
-            foreach (var section in Sections)
-            {
-                if (section.MouseOver == TimelineSectionComponents.Line)
-                {
-                    var percentPos = (e.Location.X - Padding.Left) / (double)(Width - Padding.Horizontal);
-                    var newActualPos = CalculateActualValue(percentPos);
+            var newActualPos = CalculateValue(e.Location.X);
 
-                    OnSectionClicked?.Invoke(section, e, newActualPos);
-                    break;
-                }
+            var clickedLine = Sections.FirstOrDefault(s => s.MouseOver == TimelineSectionComponents.Line);
+            if (clickedLine != null)
+            {
+                OnSectionClicked?.Invoke(this, clickedLine, e, newActualPos);
+            }
+
+            var clickedSeparator = Sections.Where(s => s.MouseOver == TimelineSectionComponents.StartSeparator || s.MouseOver == TimelineSectionComponents.EndSeparator).ToList();
+            if (clickedSeparator.Any())
+            {
+                var end = clickedSeparator.FirstOrDefault(s => s.MouseOver == TimelineSectionComponents.EndSeparator);
+                var start = clickedSeparator.FirstOrDefault(s => s.MouseOver == TimelineSectionComponents.StartSeparator);
+                OnSeparatorClicked?.Invoke(this, end, start, e, newActualPos);
             }
 
             base.OnMouseClick(e);
@@ -584,6 +707,7 @@ namespace TimeStamp
         public string TooltipDurationCustomText { get; set; }
         public string TooltipHeader { get; set; }
         public string TooltipBody { get; set; }
+        public string DisplayText { get; set; }
 
         public object Tag { get; set; }
 
@@ -594,13 +718,20 @@ namespace TimeStamp
         public Color HighlightInActiveForeColor { get; set; }
         public Color HighlightInActiveEdgeColor { get; set; }
 
+        public DrawingStyle Style { get; set; } = DrawingStyle.Solid;
+
         internal TimelineSectionComponents MouseOver { get; set; }
 
         public override string ToString()
         {
             return Start.ToString() + " - " + End.ToString() + " " + TooltipHeader;
         }
+    }
 
+    public enum DrawingStyle
+    {
+        Solid,
+        Twisted,
     }
 
     internal enum TimelineSectionComponents
@@ -621,6 +752,11 @@ namespace TimeStamp
         public double Value { get; set; }
 
         public string DisplayText { get; set; }
+        /// <summary>
+        /// The order / priorization for the <see cref="DisplayText"/>. The higher the value, the more important it is. This will affect the order of drawing and therefore reserving space in the text area. If a lower order number tries to be drawn on a space already reserved, it will not be drawn.
+        /// </summary>
+        public int DisplayTextOrder { get; set; }
+
 
         public TimelineSection OfSection { get; set; }
 

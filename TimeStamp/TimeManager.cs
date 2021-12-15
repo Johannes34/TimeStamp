@@ -50,6 +50,7 @@ namespace TimeStamp
 
         public event Action CurrentActivityUpdated = delegate { };
 
+        public Action RequestUpdateUI { get; set; } = delegate { };
 
         // Methods:
 
@@ -65,6 +66,47 @@ namespace TimeStamp
             {
                 StampList = new List<Stamp>();
             }
+
+            var allActs = StampList.SelectMany(s => s.ActivityRecords).ToArray();
+            //foreach (var act in allActs.Where(a => a.Activity == "Product Development (CA2)"))
+            //{
+            //    act.Activity = "Product Development";
+            //    act.Tags.Add("CA2");
+            //}
+            //foreach (var act in allActs.Where(a => a.Activity == "Product Development (VES)"))
+            //{
+            //    act.Activity = "Product Development";
+            //    act.Tags.Add("VES");
+            //}
+            //foreach (var act in allActs.Where(a => a.Activity == "Product Development (LDD-Cap)"))
+            //{
+            //    act.Activity = "Product Development";
+            //    act.Tags.Add("Premigrate");
+            //}
+            //foreach (var act in allActs.Where(a => a.Activity == "Mentor Product Requirements" || a.Activity == "Mentor / Siemens Integration"))
+            //{
+            //    act.Activity = "Compliance Requirements";
+            //}
+            //var allTags = Settings.Tags.SelectMany(t => t.Value).ToArray();
+            //foreach (var act in allActs.Where(a => !String.IsNullOrEmpty(a.Comment)))
+            //{
+            //    if (act.Comment == " Resuming after pause..." || act.Comment == "logged off time")
+            //        act.Comment = string.Empty;
+
+            //    if (act.Comment == "Vestigo" && !act.Tags.Contains("VES"))
+            //    {
+            //        act.Tags.Add("VES");
+            //        act.Comment = string.Empty;
+            //    }
+
+            //    var matches = allTags.Where(t => act.Comment.Contains(t));
+            //    Console.WriteLine(act.Comment + " -> " + String.Join(", ", matches));
+            //    act.Tags.AddRange(matches);
+            //    if (matches.Any())
+            //        act.Comment = String.Empty;
+            //}
+
+            //SaveStampListXml();
 
             foreach (var Stamp in StampList.ToArray())
                 if (Stamp == null)
@@ -82,8 +124,6 @@ namespace TimeStamp
                 throw new InvalidDataException("Today Stamp is null");
         }
 
-        public bool IsStamping { get; private set; } = false;
-
         public void ResumeStamping()
         {
             // assuming here that activity is null!
@@ -97,8 +137,6 @@ namespace TimeStamp
 
             // find existing stamp for today:
 
-            IsStamping = true;
-
             var existing = StampList.SingleOrDefault(t => t.Day == Time.Today);
 
             if (existing != null)
@@ -108,20 +146,25 @@ namespace TimeStamp
 
                 // TODO: (optionally) ask in a notification, whether have been working or not since last known stamp (default yes, if choosing no will automatically insert a pause)...
 
-                bool hasSetPause = RestoreLastActivity(Today);
+                // restore last activity:
+                // assuming the last activity is still valid, if there is no running activity, try to restore the last activity:
+                if (TodayCurrentActivity == null)
+                {
+                    // get latest logged activity:
+                    var last = Today.GetLastActivity();
+
+                    // the downtime is not considered a break, however a new activity record is started to provide better documentation:
+                    // finish last now:
+                    last.End = GetNowTime();
+                    // and immediately start new:
+                    StartNewActivity(last.Activity, last);
+                }
 
                 // update event (for ui):
                 CurrentActivityUpdated();
 
                 // show notification:
-                if (hasSetPause)
-                    //new Task(() =>
-                    //{
-                    //    System.Threading.Thread.Sleep(10000);
-                    //}).Start();
-                    PopupDialog.ShowAfterPause(Today.Pause, TodayCurrentActivity.Activity);
-                else
-                    PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity.Activity);
+                PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity?.Activity);
 
                 return;
             }
@@ -129,98 +172,39 @@ namespace TimeStamp
             // new day, new stamp:
 
             TodayCurrentActivity = null;
-            Today = CurrentShown = new Stamp(Time.Today, GetNowTime(), Settings.DefaultWorkingHours);
+            Today = CurrentShown = new Stamp(Time.Today, GetNowTime(), Settings.GetDefaultWorkingHours(Time.Today));
             StampList.Add(Today);
 
-            // not specified ? -> keep tracking for latest activity...
-            if (String.IsNullOrEmpty(Settings.AlwaysStartNewDayWithActivity))
-            {
-                foreach (var day in StampList.OrderByDescending(s => s.Day))
-                {
-                    if (!day.ActivityRecords.Any())
-                        continue;
-                    StartNewActivity(day.GetLastActivity().Activity, null);
-                    break;
-                }
-            }
+            string startingActivity = GetDefaultStartingActivity(Time.Today, out var mostRecent);
 
-            // if not yet set -> start tracking either default activity or just the first activity...
-            if (TodayCurrentActivity == null)
-                StartNewActivity(Settings.AlwaysStartNewDayWithActivity ?? Settings.TrackedActivities.ElementAt(0), null);
+            StartNewActivity(startingActivity, mostRecent);
 
             var previous = StampList.Where(s => s.Day < Today.Day).OrderByDescending(s => s.Day).FirstOrDefault();
             PopupDialog.ShowCurrentlyTrackingActivityOnNewDay(TodayCurrentActivity.Activity, previous);
         }
 
-        private bool RestoreLastActivity(Stamp today)
+        public string GetDefaultStartingActivity(DateTime date, out ActivityRecord lastRecord)
         {
-            // assuming the last activity is still valid, and the downtime is not considered a break:
-            // if there is no running activity, try to restore the last activity
-            if (TodayCurrentActivity == null)
+            lastRecord = null;
+
+            // default starting activity is specified in settings?
+            if (!String.IsNullOrEmpty(Settings.AlwaysStartNewDayWithActivity))
+                return Settings.AlwaysStartNewDayWithActivity;
+
+            // find most recent activity:
+            foreach (var day in StampList.Where(d => d.Day <= date).OrderByDescending(s => s.Day))
             {
-                var openEnd = today.ActivityRecords.FirstOrDefault(r => !r.End.HasValue);
-                if (openEnd != null) // this case should actually never happen?
-                {
-                    Log.Add("Warning: RestoreLastActivity has found an open end activity. " + new StackTrace().ToString());
-                    TodayCurrentActivity = openEnd;
-                }
-                else
-                {
-                    // this branch should be the default case for this method:
-
-                    // get lastest logged activity:
-                    var last = today.GetLastActivity();
-
-                    // the downtime is considered a break:
-                    if (IsQualifiedPauseBreak)
-                    {
-                        // determine pause time from last qualified event:
-
-                        TimeSpan pauseStartTime;
-
-                        // last lock off time is 'master':
-                        if (Settings.IsLockingComputerWhenLeaving)
-                        {
-                            pauseStartTime = last.End.Value;
-                            TodayCurrentActivity = last;
-                        }
-                        // last mouse movement time is 'master':
-                        else
-                        {
-                            pauseStartTime = GetTime(LastMouseMove.TimeOfDay); // should be on same day... ;-)
-                            LastMouseMove = default(DateTime);
-
-                            last.End = pauseStartTime;
-                            TodayCurrentActivity = last;
-                        }
-
-                        // set pause:
-                        Today.Pause = GetNowTime() - pauseStartTime;
-
-                        // ... and resume with a new activity now:
-                        TodayCurrentActivity = null;
-                        StartNewActivity(last.Activity, last.Comment);
-                        return true;
-                    }
-                    // the downtime is not considered a break:
-                    // otherwise, if log off time since then was more than 7 minutes, create and start new activity record (better documented, as the end time of the 'relative longer' absence is not lost):
-                    else if (GetNowTime() - last.End.Value > TimeSpan.FromMinutes(7))
-                    {
-                        today.ActivityRecords.Add(new ActivityRecord() { Activity = last.Activity, Begin = last.End.Value, End = GetNowTime() });
-                        StartNewActivity(last.Activity, null);
-                    }
-                    // otherwise, assume this is a total unrelevant break, e.g. fetched a cup of coffee, went to toilet, so just resume that activity (end time is reset to null, ergo lost and not documented):
-                    else
-                    {
-                        TodayCurrentActivity = last;
-                        last.End = null;
-                    }
-                }
+                if (!day.ActivityRecords.Any())
+                    continue;
+                lastRecord = day.GetLastActivity();
+                return lastRecord.Activity;
             }
-            return false;
+
+            // fallback, first tracked activity:
+            return Settings.TrackedActivities.ElementAtOrDefault(0) ?? String.Empty;
         }
 
-        public void StartNewActivity(string name, string comment, bool autoMatchLastComment = false)
+        public void StartNewActivity(string name, ActivityRecord previous)
         {
             // finish current activity:
             if (TodayCurrentActivity != null)
@@ -228,12 +212,17 @@ namespace TimeStamp
                 TodayCurrentActivity.End = GetNowTime();
             }
 
-            // if no comment provided, automatically apply last comment:
-            if (String.IsNullOrEmpty(comment) && autoMatchLastComment)
-                comment = Today.ActivityRecords.Where(r => r.Activity == name && !String.IsNullOrEmpty(r.Comment)).LastOrDefault()?.Comment;
+            var newActivity = new ActivityRecord() { Activity = name, Begin = GetNowTime() };
+
+            // if same activity, bring previous comment and tags:
+            if (previous != null && name == previous.Activity)
+            {
+                newActivity.Comment = previous.Comment;
+                newActivity.Tags = previous.Tags.ToList();
+            }
 
             // start new activity:
-            TodayCurrentActivity = new ActivityRecord() { Activity = name, Begin = GetNowTime(), Comment = comment };
+            TodayCurrentActivity = newActivity;
             Today.ActivityRecords.Add(TodayCurrentActivity);
 
             // has checked out already (e.g. by deleting last 'open end' activity) -> reopen day by removing end time
@@ -244,6 +233,8 @@ namespace TimeStamp
                 // it is also necessary to update the pause time:
                 CalculatePauseFromActivities(Today);
             }
+
+            ValidateStamp(Today);
 
             CurrentActivityUpdated();
         }
@@ -268,22 +259,18 @@ namespace TimeStamp
             if (considerLastMouseMove)
             {
                 // To tackle the delayed firing of the suspend event:
-                if (LastMouseMove != default(DateTime) && LastMouseMove.Date == Today.Day)
+                if (LastUserAction != default(DateTime) && LastUserAction.Date == Today.Day)
                 {
                     // TimeManager.Time.Now might as well be the next day in the morning....!!! In this case, always apply last mouse move time...
                     // or if still same day: check if last mouse move longer ago than 5 minutes
-                    if (Today.Day != TimeManager.Time.Today || LastMouseMove.TimeOfDay < TimeManager.Time.Now.TimeOfDay - TimeSpan.FromMinutes(5))
+                    if (Today.Day != TimeManager.Time.Today || LastUserAction.TimeOfDay < TimeManager.Time.Now.TimeOfDay - TimeSpan.FromMinutes(5))
                     {
                         // if yes -> provide last mouse move time to "SuspendStamping" method
-                        Log.Add($"No activity tracked since {FormatTimeSpan(LastMouseMove.TimeOfDay)}, setting days end to that time...");
-                        explicitEndTime = LastMouseMove.TimeOfDay;
+                        Log.Add($"No activity tracked since {FormatTimeSpan(LastUserAction.TimeOfDay)}, setting days end to that time...");
+                        explicitEndTime = LastUserAction.TimeOfDay;
                     }
                 }
             }
-
-            // Set Todays End And Save Xml:
-
-            IsStamping = false;
 
             // update end time:
             // if end time has been inserted and is smaller than current end time, set new end time to 'now' (TODO: is this always desired? usually end time is empty anyway, except when explicitly provided...)
@@ -292,7 +279,35 @@ namespace TimeStamp
 
             FinishActivity(Today.End);
 
+            // save xml:
             SaveStampListXml();
+        }
+
+        public void ValidateStamp(Stamp stamp)
+        {
+            // remove activities with duration '0':
+            if (stamp.ActivityRecords != null)
+            {
+                foreach (var activity in stamp.ActivityRecords.ToArray())
+                {
+                    if (activity.Begin.HasValue && activity.End.HasValue && activity.End.Value == activity.Begin.Value)
+                        DeleteActivity(stamp, activity);
+                }
+
+                // auto-fix unmatching activity times with day start/end times:
+                if (stamp.ActivityRecords.Any())
+                {
+                    var stampTime = DayTime(stamp);
+                    var activityTime = TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(r => Total(r).TotalMinutes));
+                    if (Math.Abs(stampTime.TotalMinutes - activityTime.TotalMinutes) > 0.01)
+                    {
+                        Log.Add($"The sum value of the day stamps ({stampTime}) does not match with the sum value of the activities ({activityTime}). Stamp: {stamp.Day.ToShortDateString()}");
+                    }
+                }
+            }
+
+            // TODO: check if start > end...
+            // TODO: check if overlapping...
         }
 
         #region XML-IO
@@ -349,7 +364,8 @@ namespace TimeStamp
                             new XAttribute("Name", activity.Activity ?? String.Empty),
                             new XAttribute("Begin", ParseHHMM(activity.Begin)),
                             new XAttribute("End", ParseHHMM(activity.End)),
-                            new XAttribute("Comment", activity.Comment ?? String.Empty)));
+                            new XAttribute("Comment", activity.Comment ?? String.Empty),
+                            activity.Tags.Select((t, i) => new XAttribute("Tag_" + i, t))));
                     }
                 }
                 rootXml.Add(stampXml);
@@ -416,18 +432,26 @@ namespace TimeStamp
                     stamp.ActivityRecords.Clear();
                     foreach (var actxml in stampXml.Element("Activities").Elements("Activity"))
                     {
-                        stamp.ActivityRecords.Add(new ActivityRecord()
+                        var record = new ActivityRecord()
                         {
                             Activity = actxml.Attribute("Name").Value,
                             Begin = ParseHHMM(actxml.Attribute("Begin").Value),
                             End = ParseHHMM(actxml.Attribute("End").Value),
                             Comment = actxml.Attribute("Comment").Value
-                        });
+                        };
+                        foreach (var tagAttrib in actxml.Attributes().Where(a => a.Name.LocalName.StartsWith("Tag_")))
+                            record.Tags.Add(tagAttrib.Value);
+
+                        // skip '0' duration activities...
+                        if (record.Begin.HasValue && record.End.HasValue && record.Begin.Value == record.End.Value)
+                            continue;
+                        stamp.ActivityRecords.Add(record);
                     }
                 }
 
                 stamps.Add(stamp);
             }
+
             return stamps;
         }
 
@@ -527,14 +551,6 @@ namespace TimeStamp
             return activity.End.Value - activity.Begin.Value;
         }
 
-        public bool HasMatchingActivityTimestamps(Stamp stamp, out string error)
-        {
-            var stampTime = DayTime(stamp);
-            var activityTime = TimeSpan.FromMinutes(stamp.ActivityRecords.Sum(r => Total(r).TotalMinutes));
-            bool isMatching = stampTime == activityTime;
-            error = isMatching ? null : $"The sum value of the day stamps ({stampTime}) does not match with the sum value of the activities ({activityTime}).";
-            return isMatching;
-        }
 
         // Stamping:
 
@@ -596,7 +612,7 @@ namespace TimeStamp
             stamp.End = value;
         }
 
-        public void SetPause(Stamp stamp, TimeSpan value)
+        public void SetPause(Stamp stamp, TimeSpan value, bool autoSplitActivity = false)
         {
             if (stamp.ActivityRecords.Any())
             {
@@ -606,7 +622,7 @@ namespace TimeStamp
                 // find activity gap, created by automatic pause recognition function:
                 // get the latest activity before pause, that is, the activity with an end time and no other activity with a matching start time (leaving the gap afterwards):
                 // this may also be the last activity of the day, if the day has been finished, and no other pause gap has been found
-                var activityBeforePause = stamp.ActivityRecords.FirstOrDefault(a => a.End.HasValue && !stamp.ActivityRecords.Any(aa => Math.Round(aa.Begin.Value.TotalMinutes) == Math.Round(a.End.Value.TotalMinutes)));
+                var activityBeforePause = stamp.ActivityRecords.FirstOrDefault(a => a.End.HasValue && !stamp.ActivityRecords.Any(aa => Math.Round(aa.Begin.Value.TotalMinutes) == Math.Round(a.End.Value.TotalMinutes)) && a != stamp.GetLastActivity());
 
                 TimeSpan timeDiff = (value - stamp.Pause);
 
@@ -630,6 +646,22 @@ namespace TimeStamp
                             }
                         }
                     } while (!canDistribute);
+                }
+                else if (autoSplitActivity)
+                {
+                    var pauseMatch = stamp.ActivityRecords.FirstOrDefault(a => a.Begin.Value < Settings.AutomaticPauseRecognitionStopTime && (!a.End.HasValue || a.End.Value > Settings.AutomaticPauseRecognitionStartTime));
+                    if (pauseMatch == null)
+                        pauseMatch = stamp.ActivityRecords.Last();
+
+                    var halfDuration = GetTime(TimeSpan.FromMinutes(((pauseMatch.End ?? Time.Now.TimeOfDay) - pauseMatch.Begin.Value).TotalMinutes / 2));
+                    var splitTime = pauseMatch.Begin.Value + halfDuration;
+
+                    var newAct = SplitActivity(stamp, pauseMatch, splitTime);
+
+                    var halfPause = GetTime(TimeSpan.FromMinutes(timeDiff.TotalMinutes / 2));
+                    // TODO: known bug: this may fail and created chaos, when new end < begin -> should be handled as if dragged in timeline (killing previous activities?)
+                    SetActivityEnd(stamp, newAct, newAct.End.Value - halfPause);
+                    SetActivityBegin(stamp, pauseMatch, pauseMatch.Begin.Value + halfPause);
                 }
                 else
                 {
@@ -676,12 +708,15 @@ namespace TimeStamp
                 TimeSpan pauses = TimeSpan.Zero;
                 for (int i = 0; i < stamp.ActivityRecords.Count - 1; i++)
                 {
-                    // may be caused by 'SetPause':
-                    if (i == 0 && ordered.ElementAt(i).Begin.Value > stamp.Begin)
-                        pauses += ordered.ElementAt(i).Begin.Value - stamp.Begin;
+                    var current = ordered.ElementAt(i);
+                    var next = ordered.ElementAt(i + 1);
 
-                    if (ordered.ElementAt(i).End.HasValue && ordered.ElementAt(i + 1).Begin.HasValue)
-                        pauses += (ordered.ElementAt(i + 1).Begin.Value - ordered.ElementAt(i).End.Value);
+                    // may be caused by 'SetPause':
+                    if (i == 0 && current.Begin.HasValue && current.Begin.Value > stamp.Begin)
+                        pauses += current.Begin.Value - stamp.Begin;
+
+                    if (current.End.HasValue && next.Begin.HasValue)
+                        pauses += (next.Begin.Value - current.End.Value);
                 }
                 stamp.Pause = pauses;
             }
@@ -786,6 +821,24 @@ namespace TimeStamp
             CalculatePauseFromActivities(stamp);
         }
 
+        public ActivityRecord SplitActivity(Stamp stamp, ActivityRecord activity, TimeSpan splitTime)
+        {
+            var newActivity = new ActivityRecord()
+            {
+                Activity = activity.Activity,
+                Comment = activity.Comment,
+                Tags = activity.Tags.ToList(),
+                Begin = activity.Begin,
+                End = splitTime,
+            };
+
+            stamp.ActivityRecords.Insert(stamp.ActivityRecords.IndexOf(activity), newActivity);
+
+            activity.Begin = splitTime;
+
+            return newActivity;
+        }
+
         public bool CanDeleteActivity(Stamp stamp, ActivityRecord activity)
         {
             if (stamp.ActivityRecords.Count <= 1)
@@ -832,48 +885,108 @@ namespace TimeStamp
         }
 
 
+        // Tagging:
+
+        public List<string[]> GetMostFrequentTags(string activity = null, int count = 5, TimeSpan? recentActivities = null)
+        {
+            var allTags = StampList.Where(s => recentActivities == null || DateTime.Today - s.Day <= recentActivities.Value).SelectMany(s => s.ActivityRecords).Where(a => a.Tags.Any() && (activity == null || a.Activity == activity)).Select(a => a.Tags).ToList();
+
+            var groupedTags = allTags.GroupBy(a => String.Join("", a.OrderBy(t => t))).OrderByDescending(g => g.Count());
+
+            return groupedTags.Take(count).Select(g => g.First().ToArray()).ToList();
+        }
+
         // Pause Recognition:
 
+        private DateTime m_lastUserAction;
 
-        public DateTime LastMouseMove { get; set; }
-
-        public bool IsInPauseTimeRecognitionMode
+        /// <summary>
+        /// Time of last user action. This could be mouse movement, touch input, log on/off event, keyboard key press etc...
+        /// </summary>
+        public DateTime LastUserAction
         {
-            get
+            get => m_lastUserAction;
+            set
             {
-                return Settings.AutomaticPauseRecognition
-                    && (Time.Now.TimeOfDay >= Settings.AutomaticPauseRecognitionStartTime)
-                    && (Time.Now.TimeOfDay <= Settings.AutomaticPauseRecognitionStopTime)
-                    && Today.Pause == TimeSpan.Zero;
+                if (m_lastUserAction != value)
+                {
+                    ValidateLastUserAction(m_lastUserAction, value);
+                    m_lastUserAction = value;
+                }
             }
         }
 
-        public bool IsQualifiedPauseBreak
+        private void ValidateLastUserAction(DateTime lastUserAction, DateTime currentUserAction)
         {
-            get
+            if (lastUserAction != default(DateTime))
             {
-                // is in time slot, doesnt already have pause set:
-                if (!IsInPauseTimeRecognitionMode)
-                    return false;
-
-                // last lock off time is 'master':
-                if (Settings.IsLockingComputerWhenLeaving)
+                // mouse move on a new day...
+                if (lastUserAction.Date < currentUserAction.Date)
                 {
-                    // last activitiy end is known and qualifies in time span:
-                    if (Today.GetLastActivity().End.HasValue && Time.Now.TimeOfDay.Subtract(Today.GetLastActivity().End.Value).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
-                        return true;
-                }
-                // last mouse movement time is 'master':
-                else
-                {
-                    // last mouse movement is known and qualifies in time span:
-                    if (LastMouseMove != default(DateTime) && Time.Now.Day == LastMouseMove.Day && Time.Now.TimeOfDay.Subtract(LastMouseMove.TimeOfDay).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
-                        return true;
-                }
+                    Log.Add($"New working day detected (by mouse move) (last mouse move: {lastUserAction}, mouse move just now: {currentUserAction})");
 
-                return false;
+                    // set correct end time on the previous stamp:
+                    var lastMouseMoveStamp = StampList.FirstOrDefault(s => s.Day == lastUserAction.Date);
+                    if (lastMouseMoveStamp != null)
+                    {
+                        var lastMoveTime = GetTime(lastUserAction.TimeOfDay);
+                        Log.Add($"End time of stamp {lastMouseMoveStamp.Day} set from {lastMouseMoveStamp.End} to {lastMoveTime}");
+                        SetEnd(lastMouseMoveStamp, lastMoveTime);
+                    }
+
+                    // start new stamp for today:
+                    if (Today.Day != currentUserAction.Date)
+                    {
+                        Log.Add($"Creating new day stamp for {currentUserAction.Date}");
+                        ResumeStamping();
+                    }
+                    // or, if already existing (starting at weird time in the middle of night like 3:10am, from an windows update or something):
+                    else
+                    {
+                        var nowTime = GetTime(currentUserAction.TimeOfDay);
+                        Log.Add($"Start time of stamp {Today.Day} set from {Today.Begin} to {nowTime}");
+                        SetBegin(Today, nowTime);
+
+                        // show notification:
+                        PopupDialog.ShowCurrentlyTrackingActivity(TodayCurrentActivity?.Activity);
+                    }
+
+                    // update UI:
+                    RequestUpdateUI();
+                }
+                // pause recognition -> check if it is a qualified pause break:
+                else if (IsInPauseTimeRecognitionMode && currentUserAction.Day == lastUserAction.Day && currentUserAction.TimeOfDay.Subtract(lastUserAction.TimeOfDay).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
+                {
+                    // get latest logged activity:
+                    var last = Today.GetLastActivity();
+
+                    if (last != null)
+                    {
+                        // clip end of last activity to 'pause start time':
+                        last.End = GetTime(lastUserAction.TimeOfDay);
+
+                        // ... and resume with a new activity now: // TODO: this does not honor currentUserAction parameter; otherwise, it currently is always 'NOW'...
+                        TodayCurrentActivity = null;
+                        StartNewActivity(last.Activity, last);
+
+                        // update the pause time:
+                        CalculatePauseFromActivities(Today);
+
+                        // update UI:
+                        RequestUpdateUI();
+
+                        // show notification:
+                        PopupDialog.ShowAfterPause(Today.Pause, TodayCurrentActivity?.Activity);
+                    }
+                }
             }
         }
 
+        /// <summary>
+        /// Is pause recognition enabled and currently is in specified pause time slot
+        /// </summary>
+        public bool IsInPauseTimeRecognitionMode => Settings.AutomaticPauseRecognition
+                                                    && Time.Now.TimeOfDay >= Settings.AutomaticPauseRecognitionStartTime
+                                                    && Time.Now.TimeOfDay <= Settings.AutomaticPauseRecognitionStopTime;
     }
 }

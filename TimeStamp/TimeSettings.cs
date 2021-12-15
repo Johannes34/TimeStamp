@@ -151,6 +151,9 @@ namespace TimeStamp
         public string AlwaysStartNewDayWithActivity { get; set; } = "Product Development";
 
 
+        public Dictionary<string, List<string>> Tags { get; set; }
+
+
         private int m_DefaultWorkingHours = 8;
         public int DefaultWorkingHours
         {
@@ -168,6 +171,61 @@ namespace TimeStamp
             }
         }
 
+        // Working Hours on SA/SO by default automatically 0:
+
+        private int m_DefaultWorkingHoursSaturday = 0;
+        public int DefaultWorkingHoursSaturday
+        {
+            get
+            {
+                return m_DefaultWorkingHoursSaturday;
+            }
+            set
+            {
+                if (m_DefaultWorkingHoursSaturday != value)
+                {
+                    m_DefaultWorkingHoursSaturday = value;
+                    PropertyChanged(this, new PropertyChangedEventArgs(nameof(DefaultWorkingHoursSaturday)));
+                }
+            }
+        }
+
+        private int m_DefaultWorkingHoursSunday = 0;
+        public int DefaultWorkingHoursSunday
+        {
+            get
+            {
+                return m_DefaultWorkingHoursSunday;
+            }
+            set
+            {
+                if (m_DefaultWorkingHoursSunday != value)
+                {
+                    m_DefaultWorkingHoursSunday = value;
+                    PropertyChanged(this, new PropertyChangedEventArgs(nameof(DefaultWorkingHoursSunday)));
+                }
+            }
+        }
+
+        public int GetDefaultWorkingHours(DateTime day)
+        {
+            switch (day.DayOfWeek)
+            {
+                case DayOfWeek.Monday:
+                case DayOfWeek.Tuesday:
+                case DayOfWeek.Wednesday:
+                case DayOfWeek.Thursday:
+                case DayOfWeek.Friday:
+                default:
+                    return DefaultWorkingHours;
+
+                case DayOfWeek.Saturday:
+                    return DefaultWorkingHoursSaturday;
+
+                case DayOfWeek.Sunday:
+                    return DefaultWorkingHoursSunday;
+            }
+        }
 
         public StatisticTypes StatisticType { get; set; } = StatisticTypes.TimeInLieu;
         public StatisticRanges StatisticRange { get; set; } = StatisticRanges.Ever;
@@ -176,8 +234,8 @@ namespace TimeStamp
         {
             TimeInLieu,
             Activities,
-            WeeklyActivities,
-            ActivityComments
+            //WeeklyActivities,
+            //ActivityComments
         };
 
         public enum StatisticRanges
@@ -196,6 +254,9 @@ namespace TimeStamp
             SelectedWeek,
             SelectedDay,
         };
+
+        public string StatisticActivityFilter { get; set; }
+        public Dictionary<string, string> StatisticTagCategoryFilter { get; } = new Dictionary<string, string>();
 
 
         public int WindowWidth { get; set; }
@@ -228,7 +289,7 @@ namespace TimeStamp
             WindowWidth = GetKey("WindowWidth", WindowWidth);
             WindowHeight = GetKey("WindowHeight", WindowHeight);
 
-            TrackedActivities = GetKey("TrackedActivities", String.Empty).Split(new[] { ";;;" }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            TrackedActivities = GetKey("TrackedActivities2", String.Empty).Split(new[] { ";;;" }, StringSplitOptions.RemoveEmptyEntries).ToList();
             if (!TrackedActivities.Any())
             {
                 // default:
@@ -241,6 +302,8 @@ namespace TimeStamp
                     "Documentation"
                 };
             }
+
+            Tags = GetKeyNames()?.Where(k => k.StartsWith("Tags_")).ToDictionary(k => k.Substring("Tags_".Length), k => GetKey<string>(k, String.Empty).Split(new[] { ";;;" }, StringSplitOptions.RemoveEmptyEntries).ToList()) ?? new Dictionary<string, List<string>>();
 
             AlwaysStartNewDayWithActivity = GetKey("AlwaysStartNewDayWithActivity", (string)null);
             if (AlwaysStartNewDayWithActivity == String.Empty)
@@ -262,6 +325,11 @@ namespace TimeStamp
             return defaultValue;
         }
 
+        private string[] GetKeyNames()
+        {
+            return RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default).OpenSubKey("Software").OpenSubKey("TimeStamp")?.GetValueNames();
+        }
+
         public void SaveSettings()
         {
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AutomaticPauseRecognition", AutomaticPauseRecognition);
@@ -271,8 +339,13 @@ namespace TimeStamp
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "WindowWidth", WindowWidth);
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "WindowHeight", WindowHeight);
 
-            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "TrackedActivities", String.Join(";;;", TrackedActivities));
+            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "TrackedActivities2", String.Join(";;;", TrackedActivities));
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AlwaysStartNewDayWithActivity", AlwaysStartNewDayWithActivity ?? String.Empty);
+
+            foreach (var category in Tags)
+            {
+                Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", $"Tags_{category.Key}", String.Join(";;;", category.Value));
+            }
 
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "RemindCurrentActivityWhenChangingVPN", RemindCurrentActivityWhenChangingVPN);
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "RemindCurrentActivityWhenChangingVPNWithName", RemindCurrentActivityWhenChangingVPNWithName ?? String.Empty);

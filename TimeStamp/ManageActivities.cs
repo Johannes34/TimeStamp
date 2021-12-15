@@ -27,11 +27,6 @@ namespace TimeStamp
             FillGrid();
         }
 
-        private int m_nameColumnIndex = 0;
-        private int m_commentColumnIndex = 1;
-        private int m_isDefaultColumnIndex = 2;
-        private int m_deleteColumnIndex = 3;
-
         private void FillGrid()
         {
             grdActivities.Rows.Clear();
@@ -48,8 +43,33 @@ namespace TimeStamp
                     button.Style.ForeColor = SystemColors.ControlDark;
             }
 
+            grdTags.Rows.Clear();
+            foreach (var category in m_settings.Tags)
+            {
+                foreach (var tag in category.Value)
+                {
+                    int index = grdTags.Rows.Add(category.Key, tag, "");
+                    grdTags.Rows[index].Tag = tag;
+
+                    var button = grdTags.Rows[index].Cells[m_tagDeleteColumnIndex] as DataGridViewButtonCell;
+
+                    var hasAffectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Any(r => r.Tags.Contains(tag));
+                    if (hasAffectedRecords)
+                        button.Style.ForeColor = SystemColors.ControlDark;
+                }
+            }
+
             UpdateEnabled();
         }
+
+
+
+        // Activities Grid:
+
+        private int m_nameColumnIndex = 0;
+        private int m_commentColumnIndex = 1;
+        private int m_isDefaultColumnIndex = 2;
+        private int m_deleteColumnIndex = 3;
 
         private void grdActivities_CellValueChanged(object sender, DataGridViewCellEventArgs e)
         {
@@ -173,18 +193,10 @@ namespace TimeStamp
             UpdateEnabled();
         }
 
-        private void btnMoveUp_Click(object sender, EventArgs e)
-        {
-            Move(true);
-        }
-
-        private void btnMoveDown_Click(object sender, EventArgs e)
-        {
-            Move(false);
-        }
 
         private void UpdateEnabled()
         {
+            // Activities:
             var selectedCell = grdActivities.SelectedCells.OfType<DataGridViewCell>().FirstOrDefault();
 
             var activity = m_settings.TrackedActivities.FirstOrDefault(a => selectedCell?.OwningRow.Tag as string == a);
@@ -194,6 +206,16 @@ namespace TimeStamp
 
             btnMoveUp.Enabled = hasSelection && index > 0;
             btnMoveDown.Enabled = hasSelection && index < m_settings.TrackedActivities.Count - 1;
+        }
+
+        private void btnMoveUp_Click(object sender, EventArgs e)
+        {
+            Move(true);
+        }
+
+        private void btnMoveDown_Click(object sender, EventArgs e)
+        {
+            Move(false);
         }
 
         private void Move(bool up)
@@ -216,6 +238,132 @@ namespace TimeStamp
 
                 UpdateEnabled();
             }
+        }
+
+
+
+        // Tags Grid:
+
+        private int m_tagCategoryColumnIndex = 0;
+        private int m_tagNameColumnIndex = 1;
+        private int m_tagDeleteColumnIndex = 2;
+
+        private void grdTags_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex == -1)
+                return;
+
+            var currentRow = grdTags.Rows[e.RowIndex];
+
+            var currentCategory = grdTags.Rows[e.RowIndex].Cells[m_tagCategoryColumnIndex].Value as string;
+            var currentTag = grdTags.Rows[e.RowIndex].Cells[m_tagNameColumnIndex].Value as string;
+
+            if (e.ColumnIndex == m_tagCategoryColumnIndex)
+            {
+                // rename category:
+                // no prob, since category is not saved to xml / data objects...
+                DeleteTagFromSettings(currentTag);
+                AddTagToSettings(currentTag, currentCategory);
+            }
+            else if (e.ColumnIndex == m_tagNameColumnIndex)
+            {
+                // rename tag:
+
+                string oldName = currentRow.Tag as string;
+                string newName = currentTag;
+
+                var affectedDays = m_manager.StampList.Where(s => s.ActivityRecords.Any(r => r.Tags.Contains(oldName))).ToList();
+                var affectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Tags.Contains(oldName)).ToList();
+
+                DialogResult result;
+                bool alreadyContainsTag = m_settings.Tags.Any(t => t.Value.Contains(newName));
+
+                // new activity -> just rename without asking
+                // nothing affected -> just rename without asking
+                if (oldName == null || affectedRecords.Count == 0)
+                    result = DialogResult.Yes;
+                // otherwise -> ask whether to really rename?
+                else
+                    result = MessageBox.Show(this, $"Really rename tag '{oldName}' to '{newName}' for all stamps? ({affectedDays.Count} days / {affectedRecords.Count} activities affected).{(alreadyContainsTag ? (Environment.NewLine + "Please note: This tag already exists in another category. Renaming it will merge this tag into the existing category.") : String.Empty)}", "Rename Tag?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    currentRow.Tag = newName;
+                    foreach (var affect in affectedRecords)
+                    {
+                        affect.Tags.Remove(oldName);
+                        affect.Tags.Add(newName);
+                    }
+
+                    DeleteTagFromSettings(oldName);
+                    AddTagToSettings(newName, currentCategory); // on tag merging, this method will return 'false', as the tag already exists...
+
+                    // refresh grid:
+                    FillGrid();
+                }
+                else
+                {
+                    grdTags.Rows[e.RowIndex].Cells[m_tagNameColumnIndex].Value = oldName;
+                }
+            }
+        }
+
+        private void grdTags_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            var senderGrid = (DataGridView)sender;
+
+            if (senderGrid.Columns[e.ColumnIndex] is DataGridViewButtonColumn && e.RowIndex >= 0)
+            {
+                // delete activity button clicked:
+
+                var currentTag = grdTags.Rows[e.RowIndex].Tag as string;
+
+                var affectedDays = m_manager.StampList.Where(s => s.ActivityRecords.Any(r => r.Tags.Contains(currentTag))).ToList();
+                var affectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Tags.Contains(currentTag)).ToList();
+
+                if (affectedRecords.Any())
+                {
+                    var result = MessageBox.Show(this, $"Really delete tag '{currentTag}'? It is set on {affectedDays.Count} days / {affectedRecords.Count} activities. This will remove this tag from all these days/activities.", "Delete Tag?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    if (result != DialogResult.Yes)
+                        return;
+                }
+
+                // delete from activities:
+                foreach (var record in affectedRecords)
+                    record.Tags.Remove(currentTag);
+
+                // delete from settings:
+                DeleteTagFromSettings(currentTag);
+
+                // delete from grid:
+                FillGrid();
+            }
+        }
+
+        private void DeleteTagFromSettings(string currentTag)
+        {
+            foreach (var category in m_settings.Tags.ToList())
+            {
+                foreach (var tag in category.Value.ToList())
+                {
+                    if (tag == currentTag)
+                        m_settings.Tags[category.Key].Remove(tag);
+                }
+                if (m_settings.Tags[category.Key].Count == 0)
+                    m_settings.Tags.Remove(category.Key);
+            }
+        }
+
+        private bool AddTagToSettings(string tag, string category)
+        {
+            if (m_settings.Tags.Any(k => k.Value.Contains(tag)))
+                return false;
+
+            if (!m_settings.Tags.ContainsKey(category))
+                m_settings.Tags.Add(category, new List<string>());
+
+            m_settings.Tags[category].Add(tag);
+            return true;
         }
     }
 }

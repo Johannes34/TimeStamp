@@ -37,7 +37,7 @@ namespace TimeStamp
                 btnChangeActivity.Visible = true;
                 btnChangeActivity.Click += (s, e) =>
                 {
-                    Manager.StartNewActivity(suggestedActivity, null);
+                    Manager.StartNewActivity(suggestedActivity, Manager.Today.GetLastActivity());
                     this.Close();
                 };
             }

@@ -10,8 +10,6 @@ using System.Xml.Serialization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
-using MouseKeyboardActivityMonitor;
-using MouseKeyboardActivityMonitor.WinApi;
 using System.Windows.Forms.DataVisualization.Charting;
 using Microsoft.Win32;
 using System.Xml.Linq;
@@ -42,6 +40,16 @@ namespace TimeStamp
         public TimeSettings Settings { get; private set; }
         public TimeManager Manager { get; private set; }
 
+        // TODO:
+
+        // - bug bei tageswechsel (funktioniert nicht mehr) -- neuer stamp wird nicht angelegt
+
+        // replace 'day comment' with 'day tags' (same principle as activity tags, but in a separate definition table)
+        // e.g. Category Location -- Home, Office, Customer
+        // e.g. Lunch -- Subway, Bakery, Dillinger
+        // e.g. Status -- Sick, Holiday, Special Holiday
+
+
 
         public List<Stamp> StampList => Manager.StampList;
         public Stamp CurrentShown => Manager.CurrentShown;
@@ -57,13 +65,17 @@ namespace TimeStamp
 
             AppDomain.CurrentDomain.UnhandledException += (s, e) =>
             {
-                Log.Add("Unhandled Exception: " + (e.ExceptionObject is Exception ? (e.ExceptionObject as Exception)?.GetFullExceptionMessage() : e.ExceptionObject.ToString()));
+                if (e.ExceptionObject is Exception ex)
+                    Log.Add("Unhandled Exception: " + ex.GetFullExceptionMessage());
+                else
+                    Log.Add("Unhandled Exception: " + e.ExceptionObject.ToString());
             };
 
             Settings = new TimeSettings();
             Settings.LoadSettings();
 
             Manager = new TimeManager(Settings);
+            Manager.RequestUpdateUI = RefreshControls;
 
             // needs to be called after 'Manager' has been set, and before Manager.Initialize():
             PopupDialog.Initialize(this);
@@ -80,8 +92,6 @@ namespace TimeStamp
 
             Manager.CurrentActivityUpdated += () =>
             {
-                // refresh grid to highlight the current activity with green background:
-                HighlightCurrentActivity();
                 // refresh context menu on tray icon:
                 CreateOrUpdateTrayIconContextMenu();
             };
@@ -105,6 +115,10 @@ namespace TimeStamp
             cmbStatisticType.SelectedIndexChanged += new EventHandler(comboBox1_SelectedIndexChanged);
             cmbStatisticRange.SelectedIndexChanged += new EventHandler(comboBox2_SelectedIndexChanged);
 
+            timelineToday.Owner = this;
+            timelineToday.Manager = Manager;
+            timelineToday.RequestRefresh += RefreshControls;
+
             lblTotalBalance.MaximumSize = groupBox1.Size;
             RefreshControls();
 
@@ -123,20 +137,6 @@ namespace TimeStamp
 
             this.SizeChanged += Form1_SizeChanged;
             chart1.SizeChanged += Chart1_SizeChanged;
-
-
-            // enable events for system sleep/standby/resume and OS log on/off:
-            SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
-            SystemEvents.SessionSwitch += SystemEvents_SessionSwitch;
-
-            SystemEvents.SessionEnded += SystemEvents_SessionEnded;
-            SystemEvents.SessionEnding += SystemEvents_SessionEnding;
-            SystemEvents.EventsThreadShutdown += SystemEvents_EventsThreadShutdown;
-
-
-
-            // enable events for notebook lid opening/closing:
-            //RegisterForPowerNotifications();
         }
 
         private void Form1_SizeChanged(object sender, EventArgs e)
@@ -148,27 +148,6 @@ namespace TimeStamp
             }
         }
 
-        private void SystemEvents_EventsThreadShutdown(object sender, EventArgs e)
-        {
-            Log.Add($"(EventsThreadShutdown)");
-
-            Manager.SuspendStamping();
-        }
-
-        private void SystemEvents_SessionEnding(object sender, SessionEndingEventArgs e)
-        {
-            Log.Add($"(SessionEnding: {e.Reason.ToString()})");
-
-            Manager.SuspendStamping();
-        }
-
-        private void SystemEvents_SessionEnded(object sender, SessionEndedEventArgs e)
-        {
-            Log.Add($"(SessionEnded: {e.Reason.ToString()})");
-
-            Manager.SuspendStamping();
-        }
-
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             Settings.SaveSettings();
@@ -178,86 +157,6 @@ namespace TimeStamp
             this.notifyIcon1.Visible = false;
         }
 
-        private void SystemEvents_PowerModeChanged(object sender, PowerModeChangedEventArgs e)
-        {
-            Log.Add($"{e.Mode.ToString()}...");
-
-            switch (e.Mode)
-            {
-                //case PowerModes.Resume:
-
-                //    Log("Resuming from sleep...");
-
-                //    // might be:
-                //    // - resuming in the morning of the next working day (Today set, but not correct any more)
-                //    // - resuming on the same working day after sleep (Today set and correct)
-
-                //    // does not always fire correctly, see:
-                //    // https://stackoverflow.com/questions/51271460/c-sharp-wpf-powermodechanged-doesnt-work-on-surface
-                //    // I am also working on such a problem. From what I've read, the Surface supports "Sleep state(Modern Standby)", 
-                //    // or S0 low-power, and is not yet in actual sleep state (S1-3). Pressing the power button or clicking the "sleep"
-                //    // option from the windows menu does not enter sleep directly but enters S0 low-power instead, thus not triggering PowerModeChanged.
-                //    // https://docs.microsoft.com/en-us/windows/desktop/power/system-power-states#sleep-state-modern-standby
-
-                //    ResumeStamping();
-
-                //    refreshControls();
-
-                //    break;
-
-                case PowerModes.Suspend:
-
-                    // when activating 'sleep', there might be a delay between actual trigger 'sleep' and 'lock'-event (whatever causes this... looking at you, DELL!).
-                    // this may lead to erroneous, shorter pause times as well as erroneous, later day end stamps (in fact, quite enourmous differences, as in somewhere between 20 minutes and 2 hours).
-                    // e.g.:
-                    /*
-                        06.08.2019 11:09 SessionUnlock...
-                        (actually pressed 'sleep' button on keyboard at 11:30)
-                        Last Mouse Move: 11:30
-                        06.08.2019 11:52 SessionLock...
-                        06.08.2019 12:07 SessionUnlock...
-                        (too short pause has been tracked!)
-                    */
-                    /*
-                        05.08.2019 15:34 System Unlocked...
-                        (actually pressed 'sleep' button before leaving work at around 16:20)
-                        05.08.2019 19:52 System Locked...
-                        06.08.2019 09:12 System Unlocked...
-                        (WAY too long work day balance has been tracked!)
-                    */
-
-                    // this shall be handled here:
-
-                    Manager.SuspendStamping();
-
-                    break;
-            }
-        }
-
-        private void SystemEvents_SessionSwitch(object sender, SessionSwitchEventArgs e)
-        {
-            Log.Add($"{e.Reason.ToString()}...");
-
-            switch (e.Reason)
-            {
-                case SessionSwitchReason.SessionLogon:
-                case SessionSwitchReason.SessionUnlock:
-                    // Back from lock/standby
-                    Manager.ResumeStamping();
-
-                    RefreshControls();
-
-                    break;
-
-
-                case SessionSwitchReason.SessionLogoff:
-                case SessionSwitchReason.SessionLock:
-                    // Going into lock/standby screen
-
-                    Manager.SuspendStamping(considerLastMouseMove: true);
-                    break;
-            }
-        }
 
         private bool? m_lastVpnStatus = null;
         private Task m_checkVpn;
@@ -292,482 +191,117 @@ namespace TimeStamp
 
         // Control Handling:
 
-        private void RefreshControlsAfterTextboxChange()
+        private void RefreshControls()
         {
-            // do not update textboxes to avoid cursor reset,
-            // calendar does not need to be refreshed
-            RefreshControls(false, true, true, false, true, true);
-        }
-
-        private void RefreshControls(bool updateTextBoxes = true, bool updateActivities = true, bool updateBalances = true, bool updateCalendar = true, bool updateStatistics = true, bool updateTimeline = true)
-        {
-            if (updateTextBoxes)
-            {
-                RefreshStampTextBoxes();
-
-                txtComment.Text = CurrentShown.Comment;
-                txtWorkingHours.Text = Convert.ToInt32(CurrentShown.WorkingHours).ToString();
-            }
-
-            if (updateActivities)
-            {
-                UpdateActivityList();
-            }
-
-            if (updateBalances)
-            {
-                RefreshDayBalanceLabel();
-                TimeSpan tb = Manager.CalculateTotalBalance();
-                lblTotalBalance.Text = "Total Balance (w/o Today HH:MM): " + FormatTimeSpan(tb);
-            }
-
-            if (updateCalendar)
-            {
-                StampCalendar.RemoveAllBoldedDates();
-                foreach (var day in StampList)
-                    StampCalendar.AddBoldedDate(day.Day);
-                StampCalendar.UpdateBoldedDates();
-
-                StampCalendar.TodayDate = CurrentShown.Day;
-                StampCalendar.DateChanged -= StampCalendar_DateChanged;
-                StampCalendar.SetDate(CurrentShown.Day);
-                StampCalendar.DateChanged += StampCalendar_DateChanged;
-            }
-
-            if (updateStatistics)
-            {
-                UpdateStatistics();
-            }
-
-            if (updateTimeline)
-            {
-                UpdateTimeline();
-            }
-        }
-
-        private void UpdateTimeline()
-        {
-            timelineControl1.Sections.Clear();
-
-            if (!CurrentShown.ActivityRecords.Any())
+            if (this.WindowState == FormWindowState.Minimized)
                 return;
 
-            var min = CurrentShown.ActivityRecords.Min(r => r.Begin);
-            var max = CurrentShown.ActivityRecords.Max(r => r.End ?? DateTime.Now.TimeOfDay);
-            timelineControl1.MinimumValue = (min - TimeSpan.FromHours(1)).Value.TotalMinutes;
-            timelineControl1.MaximumValue = (max + TimeSpan.FromHours(1)).TotalMinutes;
+            // validate / repair stamp:
+            Manager.ValidateStamp(CurrentShown);
 
-            timelineControl1.Sections.AddRange(CreateTimelineSections(CurrentShown, chart1));
-            timelineControl1.Refresh();
+            // updateBalances:
+            TimeSpan tb = Manager.CalculateTotalBalance();
+            lblTotalBalance.Text = "Total Balance (w/o Today HH:MM): " + FormatTimeSpan(tb);
 
-            // TODO: better preview of change while dragging, e.g. 'New Pause: xxx'
+            // updateCalendar:
+            StampCalendar.RemoveAllBoldedDates();
+            foreach (var day in StampList)
+                StampCalendar.AddBoldedDate(day.Day);
+            StampCalendar.UpdateBoldedDates();
 
-            timelineControl1.OnDragSeparator = (sep, newPos, isStartSep, commit) =>
-            {
-                var copy = commit ? CurrentShown : CurrentShown.Clone();
+            StampCalendar.TodayDate = CurrentShown.Day;
+            StampCalendar.DateChanged -= StampCalendar_DateChanged;
+            StampCalendar.SetDate(CurrentShown.Day);
+            StampCalendar.DateChanged += StampCalendar_DateChanged;
 
-                var draggedActivityStart = sep.OfSection.Tag as ActivityRecord;
-                var index = CurrentShown.ActivityRecords.IndexOf(draggedActivityStart);
+            // updateStatistics:
+            UpdateStatistics();
 
-                Console.WriteLine($"Moving Start of activity '{draggedActivityStart.Activity}' from {draggedActivityStart.Begin.Value.ToString("hh\\:mm")} to {TimeSpan.FromMinutes(newPos).ToString("hh\\:mm")}...");
-
-                if (isStartSep)
-                    TimeManager.SetActivityBegin(copy, copy.ActivityRecords.ElementAt(index), TimeManager.GetTime(TimeSpan.FromMinutes(newPos)));
-                else
-                    TimeManager.SetActivityEnd(copy, copy.ActivityRecords.ElementAt(index), TimeManager.GetTime(TimeSpan.FromMinutes(newPos)));
-
-                if (commit)
-                    RefreshControls();
-
-                return CreateTimelineSections(copy, chart1);
-            };
-
-            timelineControl1.OnDragSection = (sec, offset, commit) =>
-            {
-                var copy = commit ? CurrentShown : CurrentShown.Clone();
-
-                var draggedActivity = sec.Tag as ActivityRecord;
-                var index = CurrentShown.ActivityRecords.IndexOf(draggedActivity);
-
-                var copyActivity = copy.ActivityRecords.ElementAt(index);
-
-                Console.WriteLine($"Shifting activity '{draggedActivity.Activity}' from {draggedActivity.Begin.Value.ToString("hh\\:mm")} to {TimeSpan.FromMinutes(offset).ToString("hh\\:mm")}...");
-
-                TimeManager.SetActivityBegin(copy, copyActivity, TimeManager.GetTime(copyActivity.Begin.Value + TimeSpan.FromMinutes(offset)));
-                if (copyActivity.End.HasValue)
-                    TimeManager.SetActivityEnd(copy, copyActivity, TimeManager.GetTime(copyActivity.End.Value + TimeSpan.FromMinutes(offset)));
-
-                if (commit)
-                    RefreshControls();
-
-                return CreateTimelineSections(copy, chart1);
-            };
-
-            timelineControl1.OnSectionClicked = (sec, e, pos) =>
-            {
-                if (e.Button != MouseButtons.Right)
-                    return;
-
-                var clickedActivity = sec.Tag as ActivityRecord;
-
-                var menu = new ContextMenuStrip();
-
-                var changeTo = new ToolStripMenuItem("Change Activity to...");
-                menu.Items.Add(changeTo);
-
-                foreach (var activity in Settings.TrackedActivities)
-                {
-                    string temp = activity;
-                    changeTo.DropDownItems.Add(new ToolStripMenuItem(temp, null, (ss, ee) =>
-                    {
-                        clickedActivity.Activity = temp;
-                        RefreshControls();
-                    }));
-                }
-
-                var setComment = new ToolStripMenuItem("Set Comment...");
-                menu.Items.Add(setComment);
-
-                var commentText = new ToolStripTextBox() { Text = clickedActivity.Comment };
-                commentText.TextChanged += (ss, ee) =>
-                {
-                    clickedActivity.Comment = ((ToolStripTextBox)ss).Text;
-                    RefreshControls();
-                };
-                setComment.DropDownItems.Add(commentText);
-
-                var delete = new ToolStripMenuItem("Delete Activity", null, (ss, ee) =>
-                {
-                    if (Manager.CanDeleteActivity(CurrentShown, clickedActivity))
-                    {
-                        Manager.DeleteActivity(CurrentShown, clickedActivity);
-                        RefreshControls();
-                    }
-                });
-                delete.Enabled = Manager.CanDeleteActivity(CurrentShown, clickedActivity);
-                menu.Items.Add(delete);
-
-                var split = new ToolStripMenuItem("Split Activity here", null, (ss, ee) =>
-                {
-                    var splitTime = TimeManager.GetTime(TimeSpan.FromMinutes(pos));
-
-                    CurrentShown.ActivityRecords.Insert(CurrentShown.ActivityRecords.IndexOf(clickedActivity), new ActivityRecord()
-                    {
-                        Activity = clickedActivity.Activity,
-                        Comment = clickedActivity.Comment,
-                        Begin = clickedActivity.Begin,
-                        End = splitTime,
-                    });
-
-                    var newBegin = splitTime;
-
-                    clickedActivity.Begin = newBegin;
-
-                    RefreshControls();
-                });
-                menu.Items.Add(split);
-
-                menu.Show(timelineControl1, e.Location);
-            };
+            // updateTimeline:
+            timelineToday.Stamp = CurrentShown;
+            timelineToday.UpdateTimeline();
         }
 
-        private List<TimelineSection> CreateTimelineSections(Stamp stamp, Chart withColorsFromChart)
+        public void CreateStartActivityContextMenuStrip(ContextMenuStrip menu, bool isFromNotifyTray)
         {
-            var seaGreenPalette = new[]
-            {
-                ColorTranslator.FromHtml("#2E8B57"),
-                ColorTranslator.FromHtml("#66CDAA"),
-                ColorTranslator.FromHtml("#4682B4"),
-                ColorTranslator.FromHtml("#008B8B"),
-                ColorTranslator.FromHtml("#5F9EA0"),
-                ColorTranslator.FromHtml("#38B16E"),
-                ColorTranslator.FromHtml("#48D1CC"),
-                ColorTranslator.FromHtml("#B0C4DE"),
-                ColorTranslator.FromHtml("#8FBC8B"),
-                ColorTranslator.FromHtml("#87CEEB")
-            };
-
-            var results = new List<TimelineSection>();
-            foreach (var activity in stamp.ActivityRecords.OrderBy(r => r.Begin))
-            {
-                var point = withColorsFromChart.Series.FirstOrDefault()?.Points.FirstOrDefault(p => p.AxisLabel == activity.Activity);
-                Color activityColorAccordingToChart = Color.Empty;
-                if (point != null)
-                    activityColorAccordingToChart = seaGreenPalette.ElementAtOrDefault(withColorsFromChart.Series.FirstOrDefault().Points.IndexOf(point));
-                else
-                    activityColorAccordingToChart = seaGreenPalette.ElementAtOrDefault(stamp.ActivityRecords.Select(r => r.Activity).Distinct().FirstIndexOf(a => a == activity.Activity));
-
-                results.Add(new TimelineSection(activity, activity.Begin.Value, activity.End ?? DateTime.Now.TimeOfDay, activity.End.HasValue)
-                {
-                    ForeColor = activityColorAccordingToChart,
-                    TooltipHeader = activity.Activity,
-                    TooltipBody = activity.Comment,
-                    TooltipDurationCustomText = activity.End != null && activity.Begin != null ? $"Duration: {Manager.FormatTimeSpan(activity.End.Value - activity.Begin.Value)}" : null
-                });
-            }
-            return results;
-        }
-
-        private void RefreshStampTextBoxes()
-        {
-            txtStart.Text = FormatTimeSpan(CurrentShown.Begin);
-
-            if (CurrentShown.End.TotalMinutes != 0)
-                txtEnd.Text = FormatTimeSpan(CurrentShown.End);
-            else
-                txtEnd.Text = "";
-
-            if (CurrentShown.Pause.TotalMinutes != 0)
-                txtPause.Text = (int)CurrentShown.Pause.TotalMinutes + "";
-            else
-                txtPause.Text = "";
-        }
-
-        private void RefreshDayBalanceLabel()
-        {
-            string dayDesc = CurrentShown.Day == TimeManager.Time.Today ? "Today" : "Day";
-
-            lblToday.Text = $"{dayDesc}: {CurrentShown.Day.ToShortDateString()}";
-            lblTotal.Text = $"{dayDesc} Balance:";
-            txtCurrentShownTotal.Text = FormatTimeSpan(Manager.DayBalance(CurrentShown));
-        }
-
-        #region Current Day - Time Input Fields
-
-        private void txtStart_TextChanged(object sender, EventArgs e)
-        {
-            string error = "";
-            if (TimeManager.TryParseHHMM(txtStart.Text, out TimeSpan value))
-            {
-                TimeManager.SetBegin(CurrentShown, value);
-
-                RefreshControlsAfterTextboxChange();
-            }
-            else if (String.IsNullOrEmpty(txtStart.Text))
-            {
-                error = "Start Stamp must not be empty!";
-            }
-
-            Validate(txtStart, error);
-        }
-        private void txtEnd_TextChanged(object sender, EventArgs e)
-        {
-            string error = string.Empty;
-
-            if (TimeManager.TryParseHHMM(txtEnd.Text, out TimeSpan value))
-            {
-                if (CurrentShown.Day == TimeManager.Time.Today && value >= TimeManager.GetNowTime() + TimeSpan.FromMinutes(m_minuteThresholdToShowNotification))
-                    m_endingPopupShownLastTime = default(DateTime);
-                TimeManager.SetEnd(CurrentShown, value);
-            }
-            else if (String.IsNullOrEmpty(txtEnd.Text))
-            {
-                if (CurrentShown.Day == TimeManager.Time.Today)
-                {
-                    if (Manager.TodayCurrentActivity != null)
-                        Manager.TodayCurrentActivity.End = null;
-                    CurrentShown.End = TimeSpan.Zero;
-
-                    m_endingPopupShownLastTime = default(DateTime);
-                }
-                else
-                {
-                    // not allowed if not 'today', highlight textbox in red:
-                    error = "End Stamp must not be empty for days other than today!";
-                }
-            }
-
-            Validate(txtEnd, error);
-
-            RefreshControlsAfterTextboxChange();
-        }
-        private void txtPause_TextChanged(object sender, EventArgs e)
-        {
-            if (TimeSettings.Integer.IsMatch(txtPause.Text))
-                return;
-            if (!int.TryParse(txtPause.Text, out int pause))
-                return;
-
-            Manager.SetPause(CurrentShown, TimeSpan.FromMinutes(pause));
-
-            RefreshControlsAfterTextboxChange();
-        }
-        private void txtComment_TextChanged(object sender, EventArgs e)
-        {
-            CurrentShown.Comment = txtComment.Text;
-
-            RefreshControlsAfterTextboxChange();
-        }
-        private void txtWorkingHours_TextChanged(object sender, EventArgs e)
-        {
-            if (String.IsNullOrEmpty(txtWorkingHours.Text))
-                return;
-            if (TimeSettings.Integer.IsMatch(txtWorkingHours.Text))
-                return;
-            CurrentShown.WorkingHours = Convert.ToInt32(txtWorkingHours.Text);
-
-            RefreshControlsAfterTextboxChange();
-        }
-
-        private void Validate(TextBox txt, string error)
-        {
-            if (!String.IsNullOrEmpty(error))
-            {
-                txt.BackColor = Color.LightSalmon;
-                toolTip1.SetToolTip(txt, error);
-            }
-            else
-            {
-                txt.BackColor = SystemColors.Window;
-                toolTip1.SetToolTip(txt, null);
-            }
-        }
-
-        #endregion
-
-        #region Current Day - Activity Grid
-
-        private void UpdateActivityList()
-        {
-            grdActivities.Rows.Clear();
-            grdActivities.Columns.Clear();
-
-            grdActivities.AllowUserToAddRows = false;
-            grdActivities.AllowUserToDeleteRows = false;
-
-            grdActivities.Columns.Add(new DataGridViewButtonColumn() { HeaderText = "Start", FlatStyle = FlatStyle.Flat, Text = "▶", ToolTipText = "Start activity", UseColumnTextForButtonValue = true, Resizable = DataGridViewTriState.False, AutoSizeMode = DataGridViewAutoSizeColumnMode.ColumnHeader, Width = 35 });
-            grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "Activity", ReadOnly = true, Width = 66 });
-            grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "Hours", ReadOnly = true, Width = 60 });
-            grdActivities.Columns.Add(new DataGridViewTextBoxColumn() { HeaderText = "Comment", Width = 76 });
-
-            grdActivities.Columns[0].Visible = CurrentShown.Day == TimeManager.Time.Today;
             foreach (var activity in Settings.TrackedActivities)
             {
-                if (CurrentShown.ActivityRecords.Any(r => r.Activity == activity))
+                string displayText;
+                Color foreColor;
+                if (Today.ActivityRecords.Any(r => r.Activity == activity))
                 {
                     var activityKind = CurrentShown.ActivityRecords.Where(r => r.Activity == activity);
                     var totalActivityTime = TimeSpan.FromMinutes(activityKind.Sum(a => TimeManager.Total(a).TotalMinutes));
-                    int index = grdActivities.Rows.Add("", activity, FormatTimeSpan(totalActivityTime), activityKind.Last().Comment);
-                    grdActivities.Rows[index].Tag = activity;
-                    foreach (DataGridViewCell cell in grdActivities.Rows[index].Cells)
-                        cell.Style.ForeColor = grdActivities.DefaultCellStyle.ForeColor;
+
+                    displayText = FormatTimeSpan(totalActivityTime) + " " + activity;
+                    foreColor = Color.Black;
                 }
                 else
                 {
-                    int index = grdActivities.Rows.Add("", activity, FormatTimeSpan(TimeSpan.Zero), String.Empty);
-                    grdActivities.Rows[index].Tag = activity;
-                    foreach (DataGridViewCell cell in grdActivities.Rows[index].Cells)
-                        cell.Style.ForeColor = Color.Gray;
+                    displayText = FormatTimeSpan(TimeSpan.Zero) + " " + activity;
+                    foreColor = Color.Gray;
                 }
-            }
 
-            HighlightCurrentActivity();
+                bool isCurrentlyActive = TodayCurrentActivity?.Activity == activity;
 
-            m_hasActivityIssues = !Manager.HasMatchingActivityTimestamps(CurrentShown, out var tooltipError);
+                var bmp = new Bitmap(16, 16);
+                var grc = Graphics.FromImage(bmp);
+                grc.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                grc.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                grc.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                grc.DrawString("▶", new Font("Arial", 15, FontStyle.Bold), Brushes.Black, new PointF(0, -2));
 
-            if (!m_hasActivityIssues)
-            {
-                grdActivities.GridColor = SystemColors.ControlDark;
-                lblActivityWarning.Visible = false;
-            }
-            else
-            {
-                grdActivities.GridColor = Color.Red;
-                lblActivityWarning.Visible = true;
+                //var existing = menu.Items.OfType<ToolStripMenuItem>().FirstOrDefault(i => i.Tag as string == activity);
 
-                toolTip1.SetToolTip(lblActivityWarning, tooltipError);
-            }
+                //if (existing == null)
+                //{
 
-            grdActivities.Columns[2].ReadOnly = !m_hasActivityIssues;
-
-        }
-
-        private bool m_hasActivityIssues = false;
-
-        private void HighlightCurrentActivity()
-        {
-            // reset all highlighting:
-            foreach (DataGridViewRow row in grdActivities.Rows)
-            {
-                foreach (DataGridViewCell cell in row.Cells)
+                var menuItem = new ToolStripMenuItem(displayText, isCurrentlyActive ? bmp : null, (ss, ee) =>
                 {
-                    cell.Style.BackColor = grdActivities.DefaultCellStyle.BackColor;
-                }
-            }
-
-            if (CurrentShown != null && CurrentShown.Day == TimeManager.Time.Today)
-            {
-                // highlight current:
-                DataGridViewRow currentRow = grdActivities.Rows.OfType<DataGridViewRow>().FirstOrDefault(r => r.Cells[1]?.Value as string == TodayCurrentActivity?.Activity);
-
-                if (currentRow != null)
+                    string newActivity = ((ToolStripMenuItem)ss).Tag as string;
+                    Manager.StartNewActivity(newActivity, Today.GetLastActivity());
+                    if (isFromNotifyTray)
+                        PopupDialog.ShowCurrentlyTrackingActivity(newActivity);
+                    else
+                        RefreshControls();
+                })
                 {
-                    foreach (DataGridViewCell cell in currentRow.Cells)
-                        cell.Style.BackColor = Color.LightGreen;
+                    Tag = activity,
+                    ForeColor = foreColor
+                };
+
+                menu.Items.Add(menuItem);
+
+                var mostFrequent = Manager.GetMostFrequentTags(activity, 10);
+                if (mostFrequent.Any())
+                {
+                    var newActivity = activity;
+                    foreach (var combination in mostFrequent)
+                    {
+                        var tempTags = combination;
+                        var quickTagMenu = new ToolStripMenuItem(String.Join(", ", tempTags), null, (ss, ee) =>
+                        {
+                            Manager.StartNewActivity(newActivity, Today.GetLastActivity());
+                            Manager.TodayCurrentActivity.Tags.Clear();
+                            Manager.TodayCurrentActivity.Tags = tempTags.ToList();
+                            if (isFromNotifyTray)
+                                PopupDialog.ShowCurrentlyTrackingActivity(newActivity);
+                            else
+                                RefreshControls();
+                        });
+                        menuItem.DropDownItems.Add(quickTagMenu);
+                    }
                 }
-            }
-        }
 
-        private void cbActivityDetails_CheckedChanged(object sender, EventArgs e)
-        {
-            UpdateActivityList();
-        }
-
-        private void grdActivities_CellContentClick(object sender, DataGridViewCellEventArgs e)
-        {
-            var senderGrid = (DataGridView)sender;
-
-            if (senderGrid.Columns[e.ColumnIndex] is DataGridViewButtonColumn && e.RowIndex >= 0)
-            {
-                // start activity button clicked:
-                Manager.StartNewActivity(grdActivities.Rows[e.RowIndex].Cells[1].Value as string, null);
-                //HighlightCurrentActivity();
-                //foreach (DataGridViewCell cell in grdActivities.Rows[e.RowIndex].Cells)
-                //    cell.Style.ForeColor = grdActivities.DefaultCellStyle.ForeColor;
-
-                RefreshControls();
+                //}
+                //else
+                //{
+                //    existing.Text = displayText;
+                //    existing.Image = isCurrentlyActive ? bmp : null;
+                //    existing.ForeColor = foreColor;
+                //}
             }
         }
-
-        private void grdActivities_CellValueChanged(object sender, DataGridViewCellEventArgs e)
-        {
-            if (e.RowIndex == -1)
-                return;
-
-            var currentRow = grdActivities.Rows[e.RowIndex];
-            var currentActivity = grdActivities.Rows[e.RowIndex].Cells[1].Value as string;
-
-            if (e.ColumnIndex == 1)
-            {
-                // activity name is readonly
-            }
-            else if (e.ColumnIndex == 2)
-            {
-                // activity time is readonly
-                CurrentShown.ActivityRecords.RemoveAll(r => r.Activity == currentActivity);
-                if (TimeManager.TryParseHHMM(grdActivities.Rows[e.RowIndex].Cells[2].Value as string, out TimeSpan duration))
-                {
-                    CurrentShown.ActivityRecords.Add(new ActivityRecord() { Activity = currentActivity, Begin = CurrentShown.Begin, End = CurrentShown.Begin + duration });
-                    RefreshControls(true, true, true, true, true, true);
-                }
-            }
-            else if (e.ColumnIndex == 3)
-            {
-                // set comment of last activity:
-                var activity = CurrentShown.GetLastActivity(currentActivity);
-                if (activity != null)
-                {
-                    activity.Comment = grdActivities.Rows[e.RowIndex].Cells[3].Value as string;
-                    RefreshControls(false, true, true, false, true, true);
-                }
-                else
-                {
-                    grdActivities.Rows[e.RowIndex].Cells[3].Value = String.Empty;
-                }
-            }
-        }
-
-        #endregion
 
         #region Calendar
 
@@ -791,9 +325,14 @@ namespace TimeStamp
 
         private void btnAddTimestamp_Click(object sender, EventArgs e)
         {
+            AddTimestampForSelectedDay();
+        }
+
+        private void AddTimestampForSelectedDay()
+        {
             btnAddTimestamp.Visible = false;
 
-            Manager.CurrentShown = new Stamp(Settings.DefaultWorkingHours) { Day = StampCalendar.SelectionStart };
+            Manager.CurrentShown = new Stamp(Settings.GetDefaultWorkingHours(StampCalendar.SelectionStart)) { Day = StampCalendar.SelectionStart };
             StampList.Add(CurrentShown);
 
             RefreshControls();
@@ -803,15 +342,152 @@ namespace TimeStamp
 
         #region Chart
 
+        private static Color[] s_seaGreenPalette = new[]
+        {
+            ColorTranslator.FromHtml("#2E8B57"),
+            ColorTranslator.FromHtml("#8B0000"),
+            ColorTranslator.FromHtml("#000080"),
+            ColorTranslator.FromHtml("#4682B4"),
+            ColorTranslator.FromHtml("#B0C4DE"),
+            ColorTranslator.FromHtml("#48D1CC"),
+            ColorTranslator.FromHtml("#32CD32"),
+            ColorTranslator.FromHtml("#FF7F50"),
+            ColorTranslator.FromHtml("#DEB887"),
+            ColorTranslator.FromHtml("#A9A9A9"),
+            ColorTranslator.FromHtml("#FFE4E1"),
+            ColorTranslator.FromHtml("#FF69B4"),
+            ColorTranslator.FromHtml("#8A2BE2"),
+            ColorTranslator.FromHtml("#FFFF00"),
+            ColorTranslator.FromHtml("#000000"),
+        };
+
+        public Color GetColor(string activity)
+        {
+            if (Settings.TrackedActivities.Contains(activity))
+                return s_seaGreenPalette.ElementAt(Settings.TrackedActivities.IndexOf(activity));
+
+            //if (Settings.Tags.SelectMany(t => t.Value).Contains(activity))
+            //    return s_seaGreenPalette.ElementAt(Settings.TrackedActivities.IndexOf(activity));
+
+            return s_seaGreenPalette[0];
+        }
+
+        private void CreateFilterControls(bool force = false)
+        {
+            if (flpChartFilter.Controls.Count == 0 || force)
+            {
+                flpChartFilter.Controls.Clear();
+
+                var actCmb = new ComboBox();
+                actCmb.Margin = new Padding(3, 0, 3, 0);
+                actCmb.DropDownStyle = ComboBoxStyle.DropDownList;
+                actCmb.Items.Add(FilterControl_SelectActivityText());
+                actCmb.Items.Add(FilterControl_AllActivitiesText());
+                foreach (var activity in Settings.TrackedActivities)
+                    actCmb.Items.Add(activity);
+                actCmb.SelectedItem = String.IsNullOrEmpty(Settings.StatisticActivityFilter) ? FilterControl_SelectActivityText() : Settings.StatisticActivityFilter;
+                actCmb.SelectedIndexChanged += ActivityFilter_SelectedIndexChanged;
+                actCmb.Tag = "Activity";
+                actCmb.ContextMenu = new ContextMenu(new[]
+                {
+                    new MenuItem("Move Left", FilterControl_MoveLeft),
+                    new MenuItem("Move Right", FilterControl_MoveRight),
+                    new MenuItem("Move First", FilterControl_MoveFirst),
+                    new MenuItem("Move Last", FilterControl_MoveLast),
+                });
+                flpChartFilter.Controls.Add(actCmb);
+
+                foreach (var tagCategory in Settings.Tags)
+                {
+                    var cmb = new ComboBox();
+                    cmb.Margin = new Padding(3, 0, 3, 0);
+                    cmb.DropDownStyle = ComboBoxStyle.DropDownList;
+                    cmb.Tag = tagCategory.Key;
+                    cmb.Items.Add(FilterControl_SelectCategoryText(tagCategory.Key));
+                    cmb.Items.Add(FilterControl_AllCategoriesText(tagCategory.Key));
+                    foreach (var tag in tagCategory.Value)
+                        cmb.Items.Add(tag);
+                    cmb.SelectedItem = !Settings.StatisticTagCategoryFilter.ContainsKey(tagCategory.Key) ? FilterControl_SelectCategoryText(tagCategory.Key) : Settings.StatisticTagCategoryFilter[tagCategory.Key];
+                    cmb.SelectedIndexChanged += CategoryFilter_SelectedIndexChanged;
+                    cmb.Tag = tagCategory.Key;
+                    cmb.ContextMenu = new ContextMenu(new[]
+                    {
+                        new MenuItem("Move Left", FilterControl_MoveLeft),
+                        new MenuItem("Move Right", FilterControl_MoveRight),
+                        new MenuItem("Move First", FilterControl_MoveFirst),
+                        new MenuItem("Move Last", FilterControl_MoveLast),
+                    });
+                    flpChartFilter.Controls.Add(cmb);
+                }
+            }
+        }
+
+        private string FilterControl_SelectActivityText() => "Select Activity...";
+        private string FilterControl_AllActivitiesText() => "All Activities";
+        private string FilterControl_SelectCategoryText(string tagCategory) => $"Select {tagCategory}...";
+        private string FilterControl_AllCategoriesText(string tagCategory) => "All " + tagCategory + (tagCategory.EndsWith("s") ? "" : "s");
+
+        private void FilterControl_MoveFirst(object sender, EventArgs e)
+        {
+            FilterControl_MoveSet(sender as MenuItem, 0);
+        }
+
+        private void FilterControl_MoveLast(object sender, EventArgs e)
+        {
+            FilterControl_MoveSet(sender as MenuItem, flpChartFilter.Controls.Count);
+        }
+
+        private void FilterControl_MoveLeft(object sender, EventArgs e)
+        {
+            FilterControl_Move(sender as MenuItem, -1);
+        }
+
+        private void FilterControl_MoveRight(object sender, EventArgs e)
+        {
+            FilterControl_Move(sender as MenuItem, +1);
+        }
+
+        private void FilterControl_Move(MenuItem sender, int indexOffset)
+        {
+            var item = sender as MenuItem;
+            var menu = item?.Parent as ContextMenu;
+            var control = menu?.SourceControl as ComboBox;
+            if (control == null)
+                return;
+
+            var index = flpChartFilter.Controls.GetChildIndex(control);
+            index += indexOffset;
+
+            if (index < 0 || index > flpChartFilter.Controls.Count)
+                return;
+
+            flpChartFilter.Controls.SetChildIndex(control, index);
+            flpChartFilter.Invalidate();
+            UpdateStatistics();
+        }
+
+        private void FilterControl_MoveSet(MenuItem sender, int index)
+        {
+            var item = sender as MenuItem;
+            var menu = item?.Parent as ContextMenu;
+            var control = menu?.SourceControl as ComboBox;
+            if (control == null)
+                return;
+
+            flpChartFilter.Controls.SetChildIndex(control, index);
+            flpChartFilter.Invalidate();
+            UpdateStatistics();
+        }
+
         private void UpdateStatistics()
         {
-
             //Update Statistics Chart:
+            chart1.Titles.Clear();
             chart1.ChartAreas.Clear();
             chart1.ChartAreas.Add(new ChartArea());
             chart1.Series.Clear();
             chart1.Legends.Clear();
-            lblStatisticValues.Text = String.Empty;
+            flpChartFilter.Visible = false;
 
             var Statistics = new Series("Timestamp Statistics");
 
@@ -846,7 +522,7 @@ namespace TimeStamp
                     var hours = timeRangeStamps.Select(s => Manager.DayBalance(s).TotalHours);
                     string averageTotal = FormatTimeSpan(TimeSpan.FromHours(hours.Average()));
 
-                    lblStatisticValues.Text = $"ø Begin: {averageBegin} | ø End: {averageEnd} | ø Pause: {averagePause} | ø Total: {averageTotal}";
+                    chart1.Titles.Add($"ø Begin: {averageBegin} | ø End: {averageEnd} | ø Pause: {averagePause} | ø Total: {averageTotal}");
 
                     chart1.ChartAreas.First().AxisY.Minimum = Math.Floor(min);
                     chart1.ChartAreas.First().AxisY.Maximum = Math.Ceiling(max);
@@ -856,15 +532,18 @@ namespace TimeStamp
             }
             else if (Settings.StatisticType == TimeSettings.StatisticTypes.Activities)
             {
+                CreateFilterControls();
+                flpChartFilter.Visible = true;
+
                 Statistics.ChartType = SeriesChartType.Pie;
 
                 Statistics.XValueType = ChartValueType.String;
                 Statistics.YValueType = ChartValueType.Double;
 
 
-                var allActivities = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords);
+                var allActivities = GetFilteredActivities(GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords));
 
-                var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
+                var totalHoursPerActivity = allActivities.GroupBy(a => GetActivityGrouping(a)/*.Activity*/).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
 
                 var totalHours = totalHoursPerActivity.Values.Sum();
                 var percentPerActivity = totalHoursPerActivity.ToDictionary(a => a.Key, a => (a.Value / totalHours) * 100);
@@ -873,154 +552,164 @@ namespace TimeStamp
                 {
                     var rounded = Math.Round(act.Value, 0);
                     int index = Statistics.Points.AddXY(act.Key, rounded);
-                    Statistics.Points[index].Label = $"{act.Key}: {rounded} %";
+                    Statistics.Points[index].Label = $"{act.Key}: {Math.Round(totalHoursPerActivity[act.Key], 1)} h ({rounded} %)";
                 }
             }
-            else if (Settings.StatisticType == TimeSettings.StatisticTypes.WeeklyActivities)
-            {
-                var allStamps = GetTimeStampsInRange(true).Where(s => s.ActivityRecords.Any());
-                var timeRangeStampsPerWeek = allStamps.GroupBy(s => s.Day.GetWeekOfYearISO8601()); // daily: (s => s.Day.Day + "." + s.Day.Month);
+            //else if (Settings.StatisticType == TimeSettings.StatisticTypes.WeeklyActivities)
+            //{
+            //    var allStamps = GetTimeStampsInRange(true).Where(s => s.ActivityRecords.Any());
+            //    var timeRangeStampsPerWeek = allStamps.GroupBy(s => s.Day.GetWeekOfYearISO8601()); // daily: (s => s.Day.Day + "." + s.Day.Month);
 
-                var legend = chart1.Legends.Add("Legend");
+            //    var legend = chart1.Legends.Add("Legend");
 
-                var allActivityNames = allStamps.SelectMany(s => s.ActivityRecords).Select(r => r.Activity).Distinct().ToArray();
+            //    var allActivityNames = allStamps.SelectMany(s => s.ActivityRecords).Select(r => r.Activity).Distinct().ToArray();
 
-                int legendLength = allActivityNames.Max(a => a.Length);
-                if (chart1.Width < 600)
-                    legendLength = 8 + (chart1.Width / 100) - 2;
+            //    int legendLength = allActivityNames.Max(a => a.Length);
+            //    if (chart1.Width < 600)
+            //        legendLength = 8 + (chart1.Width / 100) - 2;
 
-                var legendTexts = allActivityNames.GetUniqueAbbreviations(legendLength);
+            //    var legendTexts = allActivityNames.GetUniqueAbbreviations(legendLength);
 
-                var series = allActivityNames.ToDictionary(a => a, a =>
-                {
-                    var statistics = new Series(a);
-                    statistics.ChartType = SeriesChartType.StackedArea100;
-                    statistics.IsXValueIndexed = true;
-                    statistics.XValueType = ChartValueType.String;
-                    statistics.YValueType = ChartValueType.Double;
-                    statistics.LegendText = legendTexts[allActivityNames.FirstIndexOf(n => n == a)];
-                    statistics.LegendToolTip = a;
-                    statistics.IsVisibleInLegend = true;
-                    statistics.Legend = "Legend";
+            //    var series = allActivityNames.ToDictionary(a => a, a =>
+            //    {
+            //        var statistics = new Series(a);
+            //        statistics.ChartType = SeriesChartType.StackedArea100;
+            //        statistics.IsXValueIndexed = true;
+            //        statistics.XValueType = ChartValueType.String;
+            //        statistics.YValueType = ChartValueType.Double;
+            //        statistics.LegendText = legendTexts[allActivityNames.FirstIndexOf(n => n == a)];
+            //        statistics.LegendToolTip = a;
+            //        statistics.IsVisibleInLegend = true;
+            //        statistics.Legend = "Legend";
 
-                    return statistics;
-                });
+            //        return statistics;
+            //    });
 
-                if (timeRangeStampsPerWeek.Count() > 1)
-                {
-                    foreach (var week in timeRangeStampsPerWeek)
-                    {
-                        var allActivities = week.SelectMany(s => s.ActivityRecords);
+            //    if (timeRangeStampsPerWeek.Count() > 1)
+            //    {
+            //        foreach (var week in timeRangeStampsPerWeek)
+            //        {
+            //            var allActivities = week.SelectMany(s => s.ActivityRecords);
 
-                        var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
+            //            var totalHoursPerActivity = allActivities.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
 
-                        var totalHours = totalHoursPerActivity.Values.Sum();
-                        var percentPerActivity = totalHoursPerActivity.ToDictionary(a => a.Key, a => (a.Value / totalHours) * 100);
+            //            var totalHours = totalHoursPerActivity.Values.Sum();
+            //            var percentPerActivity = totalHoursPerActivity.ToDictionary(a => a.Key, a => (a.Value / totalHours) * 100);
 
-                        foreach (var act in allActivityNames)
-                        {
-                            series[act].Points.AddXY($"{week.Key}/{week.First().Day.Year % 100}", percentPerActivity.ContainsKey(act) ? percentPerActivity[act] : 0.0);
-                        }
-                    }
+            //            foreach (var act in allActivityNames)
+            //            {
+            //                series[act].Points.AddXY($"{week.Key}/{week.First().Day.Year % 100}", percentPerActivity.ContainsKey(act) ? percentPerActivity[act] : 0.0);
+            //            }
+            //        }
 
-                    chart1.ChartAreas.First().AxisY.LabelStyle.Format = "0";
-                    chart1.ChartAreas.First().AxisY.RoundAxisValues();
-                }
+            //        chart1.ChartAreas.First().AxisY.LabelStyle.Format = "0";
+            //        chart1.ChartAreas.First().AxisY.RoundAxisValues();
+            //    }
 
-                foreach (var stat in series.Values)
-                    chart1.Series.Add(stat);
-                return;
-            }
-            else if (Settings.StatisticType == TimeSettings.StatisticTypes.ActivityComments)
-            {
-                var allActivities = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords).Where(a => !String.IsNullOrEmpty(a.Comment));
+            //    foreach (var stat in series.Values)
+            //        chart1.Series.Add(stat);
+            //    return;
+            //}
+            //else if (Settings.StatisticType == TimeSettings.StatisticTypes.ActivityComments)
+            //{
+            //    var allActivities = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords).Where(a => !String.IsNullOrEmpty(a.Comment));
 
-                var allCommentsWithActivities = allActivities.GroupBy(a => a.Comment.Trim());
+            //    var allCommentsWithActivities = allActivities.GroupBy(a => a.Comment.Trim());
 
-                var allActs = allActivities.Select(a => a.Activity).Distinct().ToList();
+            //    var allActs = allActivities.Select(a => a.Activity).Distinct().ToList();
 
-                // TODO: rather show as grid!
+            //    // TODO: rather show as grid!
 
-                var legend = chart1.Legends.Add("Legend");
+            //    var legend = chart1.Legends.Add("Legend");
 
-                int legendLength = allCommentsWithActivities.Max(a => a.Key.Length);
-                if (chart1.Width < 600)
-                    legendLength = 8 + (chart1.Width / 100) - 2;
+            //    int legendLength = allCommentsWithActivities.Max(a => a.Key.Length);
+            //    if (chart1.Width < 600)
+            //        legendLength = 8 + (chart1.Width / 100) - 2;
 
-                var legendTexts = allCommentsWithActivities.Select(c => c.Key).GetUniqueAbbreviations(legendLength);
+            //    var legendTexts = allCommentsWithActivities.Select(c => c.Key).GetUniqueAbbreviations(legendLength);
 
-                for (int i = 0; i < allCommentsWithActivities.Count(); i++)
-                {
-                    var comment = allCommentsWithActivities.ElementAt(i);
+            //    for (int i = 0; i < allCommentsWithActivities.Count(); i++)
+            //    {
+            //        var comment = allCommentsWithActivities.ElementAt(i);
 
-                    var totalHoursPerActivity = comment.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
+            //        var totalHoursPerActivity = comment.GroupBy(a => a.Activity).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
 
-                    var statistics = new Series(comment.Key);
-                    statistics.ChartType = SeriesChartType.StackedBar;
-                    //statistics.IsXValueIndexed = true;
-                    statistics.XValueType = ChartValueType.String;
-                    statistics.YValueType = ChartValueType.Double;
-                    statistics.LegendText = legendTexts[i];
-                    statistics.LegendToolTip = comment.Key;
-                    statistics.IsVisibleInLegend = true;
-                    statistics.Legend = "Legend";
+            //        var statistics = new Series(comment.Key);
+            //        statistics.ChartType = SeriesChartType.StackedBar;
+            //        //statistics.IsXValueIndexed = true;
+            //        statistics.XValueType = ChartValueType.String;
+            //        statistics.YValueType = ChartValueType.Double;
+            //        statistics.LegendText = legendTexts[i];
+            //        statistics.LegendToolTip = comment.Key;
+            //        statistics.IsVisibleInLegend = true;
+            //        statistics.Legend = "Legend";
 
-                    foreach (var a in allActs)
-                    {
-                        if (totalHoursPerActivity.ContainsKey(a))
-                            statistics.Points.AddXY(a, totalHoursPerActivity[a]);
-                        else
-                            statistics.Points.AddXY(a, 0);
+            //        foreach (var a in allActs)
+            //        {
+            //            if (totalHoursPerActivity.ContainsKey(a))
+            //                statistics.Points.AddXY(a, totalHoursPerActivity[a]);
+            //            else
+            //                statistics.Points.AddXY(a, 0);
 
-                    }
+            //        }
 
-                    chart1.Series.Add(statistics);
-                }
+            //        chart1.Series.Add(statistics);
+            //    }
 
-                chart1.ChartAreas.First().AxisY.LabelStyle.Format = "0";
-                chart1.ChartAreas.First().AxisY.RoundAxisValues();
+            //    chart1.ChartAreas.First().AxisY.LabelStyle.Format = "0";
+            //    chart1.ChartAreas.First().AxisY.RoundAxisValues();
 
-                return;
-            }
+            //    return;
+            //}
             else
             {
                 throw new NotImplementedException();
             }
 
             chart1.Series.Add(Statistics);
+
+            // set color palette to always show same colors for same activities / labels:
+            var labels = chart1.Series.FirstOrDefault().Points.Select(p => p.AxisLabel);
+            var colorDict = new Dictionary<string, Color>();
+            foreach (var label in labels)
+            {
+                if (!colorDict.ContainsKey(label))
+                    colorDict.Add(label, GetColor(label));
+            }
+            chart1.Palette = ChartColorPalette.None;
+            chart1.PaletteCustomColors = colorDict.Values.ToArray();
         }
 
         private void Chart1_SizeChanged(object sender, EventArgs e)
         {
-            if (Settings.StatisticType == TimeSettings.StatisticTypes.WeeklyActivities)
-            {
-                var legend = chart1.Legends.FirstOrDefault();
+            //if (Settings.StatisticType == TimeSettings.StatisticTypes.WeeklyActivities)
+            //{
+            //    var legend = chart1.Legends.FirstOrDefault();
 
-                var allActivityNames = chart1.Series.Select(s => s.LegendToolTip).Where(s => s != null).ToArray();
+            //    var allActivityNames = chart1.Series.Select(s => s.LegendToolTip).Where(s => s != null).ToArray();
 
-                int legendLength = allActivityNames.Max(a => a.Length);
-                if (chart1.Width < 800)
-                    legendLength = 6 + (chart1.Width / 50) - 4;
+            //    int legendLength = allActivityNames.Max(a => a.Length);
+            //    if (chart1.Width < 800)
+            //        legendLength = 6 + (chart1.Width / 50) - 4;
 
-                Debug.WriteLine($"Chart Width: {chart1.Width}, Legend Length: {legendLength}");
+            //    Debug.WriteLine($"Chart Width: {chart1.Width}, Legend Length: {legendLength}");
 
-                var legendTexts = allActivityNames.GetUniqueAbbreviations(legendLength);
+            //    var legendTexts = allActivityNames.GetUniqueAbbreviations(legendLength);
 
-                foreach (var series in chart1.Series)
-                {
-                    var activity = series.LegendToolTip;
+            //    foreach (var series in chart1.Series)
+            //    {
+            //        var activity = series.LegendToolTip;
 
-                    if (activity != null)
-                    {
-                        var newProposedLegendText = legendTexts.ElementAt(allActivityNames.FirstIndexOf(n => n == activity));
-                        if (series.LegendText != newProposedLegendText)
-                        {
-                            series.LegendText = newProposedLegendText;
-                        }
-                    }
-                }
-
-            }
+            //        if (activity != null)
+            //        {
+            //            var newProposedLegendText = legendTexts.ElementAt(allActivityNames.FirstIndexOf(n => n == activity));
+            //            if (series.LegendText != newProposedLegendText)
+            //            {
+            //                series.LegendText = newProposedLegendText;
+            //            }
+            //        }
+            //    }
+            //}
         }
 
         private List<Stamp> GetTimeStampsInRange(bool includeToday)
@@ -1075,6 +764,100 @@ namespace TimeStamp
             return StampList.OrderBy(s => s.Day).Where(s => (includeToday || s.Day != TimeManager.Time.Today)).Where(s => s.Day > TimeManager.Time.Now.Subtract(sinceAgo)).ToList();
         }
 
+        private IEnumerable<ActivityRecord> GetFilteredActivities(IEnumerable<ActivityRecord> activities)
+        {
+            if (!String.IsNullOrEmpty(Settings.StatisticActivityFilter))
+                activities = activities.Where(a => a.Activity == Settings.StatisticActivityFilter);
+
+            if (Settings.StatisticTagCategoryFilter.Any())
+                activities = activities.Where(a => Settings.StatisticTagCategoryFilter.Values.All(f => a.Tags.Contains(f)));
+
+            return activities.ToArray();
+        }
+
+        private bool IsExpandActivitiesFilterEnabled()
+        {
+            bool expandActivities = (string)flpChartFilter.Controls.OfType<ComboBox>().FirstOrDefault(c => (string)c.Tag == "Activity")?.SelectedItem == FilterControl_AllActivitiesText();
+            return expandActivities;
+        }
+
+        private bool IsExpandCategoryFilterEnabled(string category)
+        {
+            bool expandCategory = (string)flpChartFilter.Controls.OfType<ComboBox>().FirstOrDefault(c => (string)c.Tag == category)?.SelectedItem == FilterControl_AllCategoriesText(category);
+            return expandCategory;
+        }
+
+        private string GetActivityGrouping(ActivityRecord activity)
+        {
+            bool hasActivityFilter = !String.IsNullOrEmpty(Settings.StatisticActivityFilter);
+            bool hasCategoryFilter = Settings.StatisticTagCategoryFilter.Any();
+
+            //if (!hasActivityFilter && !hasCategoryFilter)
+            //{
+            //    // group by first filter box:
+            //    if ((string)flpChartFilter.Controls[0].Tag == "Activity")
+            //        return activity.Activity;
+            //    else
+            //        return activity.Tags.FirstOrDefault(t => Settings.Tags[(string)flpChartFilter.Controls[0].Tag].Contains(t)) ?? "Other";
+            //}
+
+            //string[] groupByTags = Settings.Tags.Where(t => !Settings.StatisticTagCategoryFilter.ContainsKey(t.Key)).SelectMany(k => k.Value).ToArray();
+
+            var groupings = new List<string>();
+
+            bool firstIteration = true;
+            foreach (var filter in flpChartFilter.Controls.OfType<ComboBox>().ToList())
+            {
+                if ((string)filter.Tag == "Activity")
+                {
+                    string activityName = (string)filter.Tag;
+                    if (IsExpandActivitiesFilterEnabled())
+                    {
+                        groupings.Add(activity.Activity);
+                    }
+                    else if (!hasActivityFilter && !IsExpandActivitiesFilterEnabled())
+                    {
+                        if (firstIteration)
+                            groupings.Add(activity.Activity);
+                    }
+                    else if (Settings.StatisticActivityFilter == activity.Activity)
+                    {
+                        groupings.Add(activity.Activity);
+                    }
+                }
+                else
+                {
+                    string tagCategory = (string)filter.Tag;
+                    if (IsExpandCategoryFilterEnabled(tagCategory) || (!hasCategoryFilter && firstIteration))
+                    {
+                        if (Settings.Tags.ContainsKey(tagCategory))
+                        {
+                            string[] groupByTags = Settings.Tags[tagCategory].ToArray();
+                            var groupedTags = String.Join(" ", activity.Tags.Where(t => groupByTags.Contains(t)));
+                            if (!String.IsNullOrEmpty(groupedTags))
+                                groupings.Add(groupedTags);
+                        }
+                    }
+                    else if (Settings.StatisticTagCategoryFilter.ContainsKey(tagCategory))
+                    {
+                        string groupByTag = Settings.StatisticTagCategoryFilter[tagCategory];
+                        if (activity.Tags.Any(t => t == groupByTag))
+                            groupings.Add(groupByTag);
+                    }
+                    //var groupedTags = String.Join(" ", activity.Tags.Where(t => groupByTags.Contains(t)));
+                    //if (!String.IsNullOrEmpty(groupedTags))
+                    //    groupings.Add(groupedTags);
+                }
+                firstIteration = false;
+            }
+
+            var grouping = String.Join(" ", groupings);
+
+            if (String.IsNullOrWhiteSpace(grouping))
+                return "Other";
+            return grouping;
+        }
+
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             Settings.StatisticType = (TimeSettings.StatisticTypes)cmbStatisticType.SelectedIndex;
@@ -1085,6 +868,25 @@ namespace TimeStamp
             Settings.StatisticRange = (TimeSettings.StatisticRanges)cmbStatisticRange.SelectedIndex;
             UpdateStatistics();
         }
+        private void ActivityFilter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ComboBox cmb = sender as ComboBox;
+            Settings.StatisticActivityFilter = Settings.TrackedActivities.Contains((string)cmb.SelectedItem) ? (string)cmb.SelectedItem : null;
+            UpdateStatistics();
+        }
+        private void CategoryFilter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ComboBox cmb = sender as ComboBox;
+            string category = cmb.Tag as string;
+            string tag = (string)cmb.SelectedItem;
+
+            if (Settings.Tags[category].Contains(tag))
+                Settings.StatisticTagCategoryFilter[category] = tag;
+            else
+                Settings.StatisticTagCategoryFilter.Remove(category);
+
+            UpdateStatistics();
+        }
 
         #endregion
 
@@ -1092,9 +894,14 @@ namespace TimeStamp
 
         private void btnTakeDayOff_Click(object sender, EventArgs e)
         {
-            if (CurrentShown.Begin.TotalMinutes != 0 && CurrentShown.End.TotalMinutes != 0)
+            // Take day off should create timestamp if not existing yet (when button "no record for this day, click here to add a new entry" is shown), instead of overwriting current day:
+            if (CurrentShown.Day != StampCalendar.SelectionStart)
             {
-                var answer = MessageBox.Show("Are you sure? You already have a Stamp for that day! This will overwrite the whole stamp.", "Take Day Off?", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+                AddTimestampForSelectedDay();
+            }
+            else if (CurrentShown.Begin.TotalMinutes != 0 || CurrentShown.End.TotalMinutes != 0)
+            {
+                var answer = MessageBox.Show($"Are you sure? You already have a Stamp for {CurrentShown.Day.ToShortDateString()}! This will overwrite the whole stamp.", "Take Day Off?", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
                 if (answer == System.Windows.Forms.DialogResult.No)
                     return;
             }
@@ -1154,52 +961,9 @@ namespace TimeStamp
                 return;
 
             var menu = notifyIcon1.ContextMenuStrip ?? new ContextMenuStrip();
-            foreach (var activity in Settings.TrackedActivities)
-            {
-                string displayText;
-                Color foreColor;
-                if (Today.ActivityRecords.Any(r => r.Activity == activity))
-                {
-                    var activityKind = CurrentShown.ActivityRecords.Where(r => r.Activity == activity);
-                    var totalActivityTime = TimeSpan.FromMinutes(activityKind.Sum(a => TimeManager.Total(a).TotalMinutes));
+            menu.Items.Clear();
 
-                    displayText = FormatTimeSpan(totalActivityTime) + " " + activity;
-                    foreColor = Color.Black;
-                }
-                else
-                {
-                    displayText = FormatTimeSpan(TimeSpan.Zero) + " " + activity;
-                    foreColor = Color.Gray;
-                }
-
-                bool isCurrentlyActive = TodayCurrentActivity?.Activity == activity;
-
-                var bmp = new Bitmap(16, 16);
-                var grc = Graphics.FromImage(bmp);
-                grc.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
-                grc.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
-                grc.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                grc.DrawString("▶", new Font("Arial", 15, FontStyle.Bold), Brushes.Black, new PointF(0, -2));
-
-                var existing = menu.Items.OfType<ToolStripMenuItem>().FirstOrDefault(i => i.Tag as string == activity);
-
-                if (existing == null)
-                {
-                    menu.Items.Add(new ToolStripMenuItem(displayText, isCurrentlyActive ? bmp : null, (ss, ee) =>
-                    {
-                        string newActivity = ((ToolStripMenuItem)ss).Tag as string;
-                        Manager.StartNewActivity(newActivity, null);
-                        PopupDialog.ShowCurrentlyTrackingActivity(newActivity);
-                    })
-                    { Tag = activity, ForeColor = foreColor });
-                }
-                else
-                {
-                    existing.Text = displayText;
-                    existing.Image = isCurrentlyActive ? bmp : null;
-                    existing.ForeColor = foreColor;
-                }
-            }
+            CreateStartActivityContextMenuStrip(menu, true);
 
             if (notifyIcon1.ContextMenuStrip == null)
                 notifyIcon1.ContextMenuStrip = menu;
@@ -1213,7 +977,6 @@ namespace TimeStamp
                 this.notifyIcon1.Visible = false;
                 this.WindowState = FormWindowState.Normal;
                 this.BringToFront();
-                //RefreshDayBalanceLabel();
                 RefreshControls();
             }
             if (e.Button == MouseButtons.Right)
@@ -1268,68 +1031,32 @@ namespace TimeStamp
                 }
             }
 
-
-            // activate / deactivate mouse movement tracking for automatic pause time recognition:
-
-            //if (Manager.IsInPauseTimeRecognitionMode)
-            {
-                if (MouseHook == null)
-                {
-                    MouseHook = new MouseHookListener(new GlobalHooker());
-                    MouseHook.MouseMoveExt += MouseHook_MouseMoveExt;
-                }
-
-                if (MouseHook != null && !MouseHook.Enabled)
-                {
-                    MouseHook.Enabled = true;
-                    Manager.LastMouseMove = default(DateTime);
-                }
-
-                // TODO: should not be here? moved to there -^
-                //Manager.LastMouseMove = TimeSpan.Zero;
-            }
-            //else
-            //{
-            //    // if not waiting for user to come back from afk, stop looking for idle
-            //    if (MouseHook != null && MouseHook.Enabled)
-            //    {
-            //        MouseHook.Enabled = false;
-            //    }
-            //}
-
+            // check for user mouse movement to update last user action (e.g. pause recognition):
+            CheckHasMouseMoved();
 
             // check whether there is an active vpn connection, and if applicable show current activity reminder:
-
             StartDetectingVpnConnectionChangeAndNotify();
 
-
+            // update ui once per minute (only if app is currently shown):
+            if (DateTime.Now.Second < 9)
+            {
+                RefreshControls();
+            }
         }
 
+        private Point m_lastLocation;
 
-        private MouseHookListener MouseHook;
-
-        private void MouseHook_MouseMoveExt(object sender, MouseEventExtArgs e)
+        private void CheckHasMouseMoved()
         {
-            // test comment out to show the correct notification (upon log in):
+            // only considered user-invoked mouse move if moved at least 2 px to any direction (to prevent 'idle', 'ghost' ticks):
+            if (!m_lastLocation.IsEmpty && (Math.Abs(m_lastLocation.X - MousePosition.X) > 1 || Math.Abs(m_lastLocation.Y - MousePosition.Y) > 1))
+            {
+                Manager.LastUserAction = TimeManager.Time.Now;
+            }
 
-            //if (Manager.IsQualifiedPauseBreak)
-            //{
-            //    Log.Add("Mouse moved + qualified pause break, resuming stamping (not logged in yet?) -> notification is being shown...");
-
-            //    Manager.ResumeStamping();
-
-            //    // refresh UI:
-            //    RefreshControls();
-            //}
-
-
-            // if m
-
-
-            Manager.LastMouseMove = TimeManager.Time.Now;
+            m_lastLocation = MousePosition;
         }
 
         #endregion
-
     }
 }

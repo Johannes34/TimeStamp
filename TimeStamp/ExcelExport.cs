@@ -176,7 +176,8 @@ namespace TimeStamp
                     if (stamp.ElementAt(i).Day.AddDays(1) == stamp.ElementAt(i + 1).Day)
                         offworkTimes.Add((TimeSpan.FromHours(24) - stamp.ElementAt(i).End) + stamp.ElementAt(i + 1).Begin);
                 }
-                sheet.Cells[row, 3].Value = offworkTimes.Average(s => s).RoundToTotalQuarterHours();
+                if (offworkTimes.Any())
+                    sheet.Cells[row, 3].Value = offworkTimes.Average(s => s).RoundToTotalQuarterHours();
 
                 row++;
             }

@@ -41,6 +41,8 @@ namespace TimeStamp
             // General:
 
             txtDefaultHours.DataBindings.Add(new Binding(nameof(TextBox.Text), settings, nameof(settings.DefaultWorkingHours), false, DataSourceUpdateMode.OnPropertyChanged));
+            txtDefaultHoursSa.DataBindings.Add(new Binding(nameof(TextBox.Text), settings, nameof(settings.DefaultWorkingHoursSaturday), false, DataSourceUpdateMode.OnPropertyChanged));
+            txtDefaultHoursSo.DataBindings.Add(new Binding(nameof(TextBox.Text), settings, nameof(settings.DefaultWorkingHoursSunday), false, DataSourceUpdateMode.OnPropertyChanged));
 
 
             // Notifications:

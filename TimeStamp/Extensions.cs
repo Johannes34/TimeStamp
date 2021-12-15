@@ -17,8 +17,11 @@ namespace TimeStamp
             while (ie.InnerException != null)
             {
                 ie = ie.InnerException;
-                eMsg += "\r\n" + ie.Message;
+                eMsg += Environment.NewLine + ie.Message;
             }
+
+            eMsg += Environment.NewLine + e.StackTrace;
+
             return eMsg;
         }
 

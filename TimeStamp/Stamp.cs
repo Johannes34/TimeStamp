@@ -25,7 +25,6 @@ namespace TimeStamp
             this.Begin = begin;
         }
 
-
         public DateTime Day { get; set; }
         public TimeSpan Begin { get; set; }
         public TimeSpan End { get; set; }
@@ -63,19 +62,6 @@ namespace TimeStamp
             return firstStart;
         }
 
-        //public ActivityRecord[] GetActivitiesDuring(TimeSpan from, TimeSpan to, string activity = null)
-        //{
-        //    // from all / from certain activity field:
-        //    IEnumerable<ActivityRecord> records = (activity == null ? ActivityRecords : ActivityRecords.Where(r => r.Activity == activity));
-
-        //    if (!records.Any())
-        //        return null;
-
-        //    // with intersecting spans:
-        //    var intersecting = records.Where(r => r.begin.Value < to && (!r.end.HasValue || r.end > from)).ToArray();
-        //    return intersecting;
-        //}
-
         public ActivityRecord GetLastActivity(string activity = null)
         {
             // from all / from certain activity field:
@@ -100,6 +86,8 @@ namespace TimeStamp
     public class ActivityRecord
     {
         public string Activity { get; set; }
+
+        public List<string> Tags { get; set; } = new List<string>();
 
         public TimeSpan? Begin { get; set; }
 
