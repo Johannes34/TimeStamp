@@ -378,7 +378,7 @@ namespace TimeStamp
         {
             if (!time.HasValue)
                 return String.Empty;
-            return time.Value.Hours + ":" + time.Value.Minutes;
+            return time.Value.Hours.ToString("00") + ":" + time.Value.Minutes.ToString("00");
         }
 
         public static bool TryParseHHMM(string time, out TimeSpan result)
