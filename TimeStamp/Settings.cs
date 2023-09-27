@@ -25,18 +25,8 @@ namespace TimeStamp
 
             cbEnablePauseRec.DataBindings.Add(new Binding(nameof(CheckBox.Checked), settings, nameof(settings.AutomaticPauseRecognition), false, DataSourceUpdateMode.OnPropertyChanged));
 
-            cbComputerIsLockedWhenLeaving.DataBindings.Add(new Binding(nameof(CheckBox.Checked), settings, nameof(settings.IsLockingComputerWhenLeaving), false, DataSourceUpdateMode.OnPropertyChanged));
-            cbComputerIsLockedWhenLeaving.DataBindings.Add(new Binding(nameof(CheckBox.Enabled), settings, nameof(settings.AutomaticPauseRecognition)));
-
             txtMinimumPauseMinutes.DataBindings.Add(new Binding(nameof(TextBox.Text), settings, nameof(settings.AutomaticPauseRecognitionMinPauseTime), false, DataSourceUpdateMode.OnPropertyChanged));
             txtMinimumPauseMinutes.DataBindings.Add(new Binding(nameof(TextBox.Enabled), settings, nameof(settings.AutomaticPauseRecognition)));
-
-            txtMinimumPauseStart.DataBindings.Add(new Binding(nameof(TextBox.Text), this, nameof(PauseStartTime), false, DataSourceUpdateMode.OnPropertyChanged));
-            txtMinimumPauseStart.DataBindings.Add(new Binding(nameof(TextBox.Enabled), settings, nameof(settings.AutomaticPauseRecognition)));
-
-            txtMaximumPauseEnd.DataBindings.Add(new Binding(nameof(TextBox.Text), this, nameof(PauseEndTime), false, DataSourceUpdateMode.OnPropertyChanged));
-            txtMaximumPauseEnd.DataBindings.Add(new Binding(nameof(TextBox.Enabled), settings, nameof(settings.AutomaticPauseRecognition)));
-
 
             // General:
 
@@ -56,36 +46,6 @@ namespace TimeStamp
         public event PropertyChangedEventHandler PropertyChanged = delegate { };
 
         private TimeManager m_manager;
-
-        public string PauseStartTime
-        {
-            get
-            {
-                return TimeManager.ParseHHMM(m_manager.Settings.AutomaticPauseRecognitionStartTime);
-            }
-            set
-            {
-                if (TimeManager.TryParseHHMM(value, out TimeSpan res))
-                    m_manager.Settings.AutomaticPauseRecognitionStartTime = res;
-
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PauseStartTime)));
-            }
-        }
-
-        public string PauseEndTime
-        {
-            get
-            {
-                return TimeManager.ParseHHMM(m_manager.Settings.AutomaticPauseRecognitionStopTime);
-            }
-            set
-            {
-                if (TimeManager.TryParseHHMM(value, out TimeSpan res))
-                    m_manager.Settings.AutomaticPauseRecognitionStopTime = res;
-
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PauseEndTime)));
-            }
-        }
 
         private void btnManageActivities_Click(object sender, EventArgs e)
         {

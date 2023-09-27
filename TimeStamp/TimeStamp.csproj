@@ -10,7 +10,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>TimeStamp</RootNamespace>
     <AssemblyName>TimeStamp</AssemblyName>
-    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
     <FileAlignment>512</FileAlignment>
@@ -80,6 +80,7 @@
     <Compile Include="PopupDialog.Designer.cs">
       <DependentUpon>PopupDialog.cs</DependentUpon>
     </Compile>
+    <Compile Include="ProcessWatcher.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings.cs">

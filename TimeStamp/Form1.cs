@@ -372,7 +372,7 @@ namespace TimeStamp
             return s_seaGreenPalette[0];
         }
 
-        private void CreateFilterControls(bool force = false)
+        private void CreateFilterControls(string[] allComments, bool force = false)
         {
             if (flpChartFilter.Controls.Count == 0 || force)
             {
@@ -419,6 +419,25 @@ namespace TimeStamp
                     });
                     flpChartFilter.Controls.Add(cmb);
                 }
+
+                var commentCmb = new ComboBox();
+                commentCmb.Margin = new Padding(3, 0, 3, 0);
+                commentCmb.DropDownStyle = ComboBoxStyle.DropDownList;
+                commentCmb.Items.Add(FilterControl_SelectCommentText());
+                commentCmb.Items.Add(FilterControl_AllCommentsText());
+                foreach (var comment in allComments)
+                    commentCmb.Items.Add(comment);
+                commentCmb.SelectedItem = String.IsNullOrEmpty(Settings.StatisticCommentFilter) ? FilterControl_SelectCommentText() : Settings.StatisticCommentFilter;
+                commentCmb.SelectedIndexChanged += CommentFilter_SelectedIndexChanged;
+                commentCmb.Tag = "Comment";
+                commentCmb.ContextMenu = new ContextMenu(new[]
+                {
+                        new MenuItem("Move Left", FilterControl_MoveLeft),
+                        new MenuItem("Move Right", FilterControl_MoveRight),
+                        new MenuItem("Move First", FilterControl_MoveFirst),
+                        new MenuItem("Move Last", FilterControl_MoveLast),
+                    });
+                flpChartFilter.Controls.Add(commentCmb);
             }
         }
 
@@ -426,6 +445,8 @@ namespace TimeStamp
         private string FilterControl_AllActivitiesText() => "All Activities";
         private string FilterControl_SelectCategoryText(string tagCategory) => $"Select {tagCategory}...";
         private string FilterControl_AllCategoriesText(string tagCategory) => "All " + tagCategory + (tagCategory.EndsWith("s") ? "" : "s");
+        private string FilterControl_SelectCommentText() => "Select Comment...";
+        private string FilterControl_AllCommentsText() => "All Comments";
 
         private void FilterControl_MoveFirst(object sender, EventArgs e)
         {
@@ -532,7 +553,10 @@ namespace TimeStamp
             }
             else if (Settings.StatisticType == TimeSettings.StatisticTypes.Activities)
             {
-                CreateFilterControls();
+                var allActiviesInRange = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords);
+                var allComments = allActiviesInRange.Select(a => a.Comment).Distinct().ToArray();
+
+                CreateFilterControls(allComments);
                 flpChartFilter.Visible = true;
 
                 Statistics.ChartType = SeriesChartType.Pie;
@@ -541,7 +565,7 @@ namespace TimeStamp
                 Statistics.YValueType = ChartValueType.Double;
 
 
-                var allActivities = GetFilteredActivities(GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords));
+                var allActivities = GetFilteredActivities(allActiviesInRange);
 
                 var totalHoursPerActivity = allActivities.GroupBy(a => GetActivityGrouping(a)/*.Activity*/).ToDictionary(a => a.Key, a => a.Sum(ar => TimeManager.Total(ar).TotalHours));
 
@@ -772,6 +796,9 @@ namespace TimeStamp
             if (Settings.StatisticTagCategoryFilter.Any())
                 activities = activities.Where(a => Settings.StatisticTagCategoryFilter.Values.All(f => a.Tags.Contains(f)));
 
+            if (Settings.StatisticCommentFilter != null)
+                activities = activities.Where(a => a.Comment == Settings.StatisticCommentFilter);
+
             return activities.ToArray();
         }
 
@@ -787,10 +814,17 @@ namespace TimeStamp
             return expandCategory;
         }
 
+        private bool IsExpandCommentsFilterEnabled()
+        {
+            bool expandActivities = (string)flpChartFilter.Controls.OfType<ComboBox>().FirstOrDefault(c => (string)c.Tag == "Comment")?.SelectedItem == FilterControl_AllCommentsText();
+            return expandActivities;
+        }
+
         private string GetActivityGrouping(ActivityRecord activity)
         {
             bool hasActivityFilter = !String.IsNullOrEmpty(Settings.StatisticActivityFilter);
             bool hasCategoryFilter = Settings.StatisticTagCategoryFilter.Any();
+            bool hasCommentFilter = Settings.StatisticCommentFilter != null;
 
             //if (!hasActivityFilter && !hasCategoryFilter)
             //{
@@ -823,6 +857,22 @@ namespace TimeStamp
                     else if (Settings.StatisticActivityFilter == activity.Activity)
                     {
                         groupings.Add(activity.Activity);
+                    }
+                }
+                else if ((string)filter.Tag == "Comment")
+                {
+                    if (IsExpandCommentsFilterEnabled())
+                    {
+                        groupings.Add(activity.Comment);
+                    }
+                    else if (!hasCommentFilter && !IsExpandCommentsFilterEnabled())
+                    {
+                        if (firstIteration)
+                            groupings.Add(activity.Comment);
+                    }
+                    else if (Settings.StatisticCommentFilter == activity.Comment)
+                    {
+                        groupings.Add(activity.Comment);
                     }
                 }
                 else
@@ -885,6 +935,15 @@ namespace TimeStamp
             else
                 Settings.StatisticTagCategoryFilter.Remove(category);
 
+            UpdateStatistics();
+        }
+        private void CommentFilter_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            ComboBox cmb = sender as ComboBox;
+            var selectedComment = (string)cmb.SelectedItem;
+            if (selectedComment == FilterControl_AllCommentsText() || selectedComment == FilterControl_SelectCommentText())
+                selectedComment = null;
+            Settings.StatisticCommentFilter = selectedComment;
             UpdateStatistics();
         }
 

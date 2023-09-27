@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml.Linq;
 
@@ -122,6 +123,52 @@ namespace TimeStamp
 
             if (Today == null)
                 throw new InvalidDataException("Today Stamp is null");
+
+            ProcessWatcher.Start(Settings);
+            ProcessWatcher.OnCurrentProcessWindowTitleChanged += (windowTitle) =>
+            {
+                if (Settings.EnableAutoTagging)
+                {
+                    Dictionary<string, string> categories = new Dictionary<string, string>();
+                    foreach (var tag in Settings.AutoTagging)
+                    {
+                        var regex = new Regex(tag.Key);
+                        var match = regex.Match(windowTitle);
+                        if (match.Success)
+                        {
+                            var categoryAndTag = tag.Value.Split(':');
+                            if (categoryAndTag.Length == 2)
+                            {
+                                var category = categoryAndTag[0];
+                                if (!categories.ContainsKey(category))
+                                {
+                                    var tagValue = categoryAndTag[1];
+
+                                    tagValue = tagValue.Replace("[value]", match.Value);
+                                    var groups = regex.GetGroupNames();
+                                    foreach (string groupName in groups)
+                                    {
+                                        var group = match.Groups[groupName];
+                                        if (group.Success)
+                                            tagValue = tagValue.Replace($"[{groupName}]", group.Value);
+                                    }
+
+                                    categories.Add(category, tagValue);
+                                }
+                            }
+                        }
+                    }
+
+                    if (categories.Any())
+                    {
+                        string currentComment = TodayCurrentActivity.Comment;
+
+                        StartNewActivity(TodayCurrentActivity.Activity, null);
+                        TodayCurrentActivity.Comment = currentComment;
+                        TodayCurrentActivity.Tags.AddRange(categories.Values);
+                    }
+                }
+            };
         }
 
         public void ResumeStamping()
@@ -649,7 +696,7 @@ namespace TimeStamp
                 }
                 else if (autoSplitActivity)
                 {
-                    var pauseMatch = stamp.ActivityRecords.FirstOrDefault(a => a.Begin.Value < Settings.AutomaticPauseRecognitionStopTime && (!a.End.HasValue || a.End.Value > Settings.AutomaticPauseRecognitionStartTime));
+                    var pauseMatch = stamp.ActivityRecords.FirstOrDefault(a => a.Duration.HasValue && a.Duration.Value.TotalMinutes > Settings.AutomaticPauseRecognitionMinPauseTime);
                     if (pauseMatch == null)
                         pauseMatch = stamp.ActivityRecords.Last();
 
@@ -925,6 +972,9 @@ namespace TimeStamp
                 {
                     Log.Add($"New working day detected (by mouse move) (last mouse move: {lastUserAction}, mouse move just now: {currentUserAction})");
 
+                    // save xml on new day...
+                    SaveStampListXml();
+
                     // set correct end time on the previous stamp:
                     var lastMouseMoveStamp = StampList.FirstOrDefault(s => s.Day == lastUserAction.Date);
                     if (lastMouseMoveStamp != null)
@@ -955,7 +1005,7 @@ namespace TimeStamp
                     RequestUpdateUI();
                 }
                 // pause recognition -> check if it is a qualified pause break:
-                else if (IsInPauseTimeRecognitionMode && currentUserAction.Day == lastUserAction.Day && currentUserAction.TimeOfDay.Subtract(lastUserAction.TimeOfDay).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime)
+                else if (IsQualifiedPauseBreak(lastUserAction, currentUserAction))
                 {
                     // get latest logged activity:
                     var last = Today.GetLastActivity();
@@ -982,11 +1032,9 @@ namespace TimeStamp
             }
         }
 
-        /// <summary>
-        /// Is pause recognition enabled and currently is in specified pause time slot
-        /// </summary>
-        public bool IsInPauseTimeRecognitionMode => Settings.AutomaticPauseRecognition
-                                                    && Time.Now.TimeOfDay >= Settings.AutomaticPauseRecognitionStartTime
-                                                    && Time.Now.TimeOfDay <= Settings.AutomaticPauseRecognitionStopTime;
+        public bool IsQualifiedPauseBreak(DateTime lastUserAction, DateTime currentUserAction)
+        {
+            return Settings.AutomaticPauseRecognition && currentUserAction.Day == lastUserAction.Day && currentUserAction.TimeOfDay.Subtract(lastUserAction.TimeOfDay).TotalMinutes >= Settings.AutomaticPauseRecognitionMinPauseTime;
+        }
     }
 }

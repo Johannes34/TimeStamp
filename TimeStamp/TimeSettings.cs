@@ -32,40 +32,6 @@ namespace TimeStamp
             }
         }
 
-        private TimeSpan m_AutomaticPauseRecognitionStartTime = new TimeSpan(11, 30, 0);
-        public TimeSpan AutomaticPauseRecognitionStartTime
-        {
-            get
-            {
-                return m_AutomaticPauseRecognitionStartTime;
-            }
-            set
-            {
-                if (m_AutomaticPauseRecognitionStartTime != value)
-                {
-                    m_AutomaticPauseRecognitionStartTime = value;
-                    PropertyChanged(this, new PropertyChangedEventArgs(nameof(AutomaticPauseRecognitionStartTime)));
-                }
-            }
-        }
-
-        private TimeSpan m_AutomaticPauseRecognitionStopTime = new TimeSpan(13, 30, 0);
-        public TimeSpan AutomaticPauseRecognitionStopTime
-        {
-            get
-            {
-                return m_AutomaticPauseRecognitionStopTime;
-            }
-            set
-            {
-                if (m_AutomaticPauseRecognitionStopTime != value)
-                {
-                    m_AutomaticPauseRecognitionStopTime = value;
-                    PropertyChanged(this, new PropertyChangedEventArgs(nameof(AutomaticPauseRecognitionStopTime)));
-                }
-            }
-        }
-
         private int m_AutomaticPauseRecognitionMinPauseTime = 12;
         public int AutomaticPauseRecognitionMinPauseTime
         {
@@ -79,27 +45,6 @@ namespace TimeStamp
                 {
                     m_AutomaticPauseRecognitionMinPauseTime = value;
                     PropertyChanged(this, new PropertyChangedEventArgs(nameof(AutomaticPauseRecognitionMinPauseTime)));
-                }
-            }
-        }
-
-        private bool m_IsLockingComputerWhenLeaving = true;
-        /// <summary>
-        /// Determines, how the pause 'start' time is being detected: If the property is true, it is assumed that the computer will not be left behind unlocked, so the last 'log off' time is used for pause calculation, independently of any mouse movements.
-        /// On the other hand, if this property is false, the pause times are calculated by the last mouse move time stamp. This makes sense, when the computer is not being locked when leaving it (auto-log-off time stamp is then ignored).
-        /// </summary>
-        public bool IsLockingComputerWhenLeaving
-        {
-            get
-            {
-                return m_IsLockingComputerWhenLeaving;
-            }
-            set
-            {
-                if (m_IsLockingComputerWhenLeaving != value)
-                {
-                    m_IsLockingComputerWhenLeaving = value;
-                    PropertyChanged(this, new PropertyChangedEventArgs(nameof(IsLockingComputerWhenLeaving)));
                 }
             }
         }
@@ -152,6 +97,46 @@ namespace TimeStamp
 
 
         public Dictionary<string, List<string>> Tags { get; set; }
+
+        public bool EnableAutoTrackingApplications { get; set; }
+        public Dictionary<string, string> AutoTrackingApplications { get; set; } = new Dictionary<string, string>()
+        {
+            { "Microsoft Visual Studio", "Visual Studio" },
+
+            { "IES LDorado JIRA - Google Chrome", "JIRA" },
+            { "Confluence - Google Chrome", "Confluence" },
+            { "TeamCity - Google Chrome", "Teamcity" },
+            { "Google Chrome", "Google Chrome" },
+
+            { "Internet Explorer", "Internet Explorer" },
+
+            { "Outlook", "Outlook" },
+            { "Message (HTML)", "Outlook" },
+
+            { "Microsoft Teams", "Microsoft Teams" },
+
+            { "PowerPoint", "PowerPoint" },
+            { "Excel", "Excel" },
+
+            { "Notepad++", "Notepad" },
+
+            { "Capital Harness Costing LD", "Capital Harness Costing LD" },
+            { "Capital Harness Designer LD", "Capital Harness Designer LD" },
+        };
+
+        public bool EnableAutoTagging { get; set; }
+        public Dictionary<string, string> AutoTagging { get; set; } = new Dictionary<string, string>()
+        {
+            { @"LDCA", "Products:CA2" },
+            { @"CostAccounting", "Products:CA2" },
+            { @"CalculationCenter", "Products:CA2" },
+            { @"LDCA-\d+", "Issues:[value]" },
+
+            { @"LDD", "Products:LDD" },
+            { @"LDDesign", "Products:LDD" },
+            { @"CR-NEX-\d+", "Issues:[value]" },
+            { @"LDD-\d+", "Issues:[value]" },
+        };
 
 
         private int m_DefaultWorkingHours = 8;
@@ -257,6 +242,7 @@ namespace TimeStamp
 
         public string StatisticActivityFilter { get; set; }
         public Dictionary<string, string> StatisticTagCategoryFilter { get; } = new Dictionary<string, string>();
+        public string StatisticCommentFilter { get; set; }
 
 
         public int WindowWidth { get; set; }
@@ -282,6 +268,11 @@ namespace TimeStamp
         public void LoadSettings()
         {
             AutomaticPauseRecognition = GetKey("AutomaticPauseRecognition", true);
+            AutomaticPauseRecognitionMinPauseTime = GetKey("AutomaticPauseRecognitionMinPauseTime", 12);
+
+            DefaultWorkingHours = GetKey("DefaultWorkingHours", 8);
+            DefaultWorkingHoursSaturday = GetKey("DefaultWorkingHoursSaturday", 0);
+            DefaultWorkingHoursSunday = GetKey("DefaultWorkingHoursSunday", 0);
 
             StatisticType = (StatisticTypes)GetKey("StatisticsTypeIndex", 0);
             StatisticRange = (StatisticRanges)GetKey("StatisticsTimeIndex", 0);
@@ -333,6 +324,12 @@ namespace TimeStamp
         public void SaveSettings()
         {
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AutomaticPauseRecognition", AutomaticPauseRecognition);
+            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AutomaticPauseRecognitionMinPauseTime", AutomaticPauseRecognitionMinPauseTime);
+
+            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "DefaultWorkingHours", DefaultWorkingHours);
+            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "DefaultWorkingHoursSaturday", DefaultWorkingHoursSaturday);
+            Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "DefaultWorkingHoursSunday", DefaultWorkingHoursSunday);
+
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "StatisticsTypeIndex", (int)StatisticType);
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "StatisticsTimeIndex", (int)StatisticRange);
 
@@ -341,6 +338,8 @@ namespace TimeStamp
 
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "TrackedActivities2", String.Join(";;;", TrackedActivities));
             Registry.SetValue("HKEY_CURRENT_USER\\Software\\TimeStamp\\", "AlwaysStartNewDayWithActivity", AlwaysStartNewDayWithActivity ?? String.Empty);
+
+            // TODO: Remove all Tags_ keys first! otherwise, existing ones will not be deleted...
 
             foreach (var category in Tags)
             {

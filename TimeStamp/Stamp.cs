@@ -32,6 +32,7 @@ namespace TimeStamp
         public string Comment { get; set; }
         public int WorkingHours { get; set; }
 
+        public Dictionary<string, int> InAppTimes { get; set; }
 
         public Stamp Clone()
         {
@@ -94,5 +95,8 @@ namespace TimeStamp
         public TimeSpan? End { get; set; }
 
         public string Comment { get; set; }
+
+        [XmlIgnore]
+        public TimeSpan? Duration => Begin.HasValue && End.HasValue ? (End.Value - Begin.Value) : default;
     }
 }

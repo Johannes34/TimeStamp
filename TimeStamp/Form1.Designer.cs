@@ -67,12 +67,12 @@
             // 
             // btnAddTimestamp
             // 
-            this.btnAddTimestamp.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.btnAddTimestamp.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.btnAddTimestamp.Location = new System.Drawing.Point(6, 3);
             this.btnAddTimestamp.Name = "btnAddTimestamp";
-            this.btnAddTimestamp.Size = new System.Drawing.Size(753, 101);
+            this.btnAddTimestamp.Size = new System.Drawing.Size(923, 101);
             this.btnAddTimestamp.TabIndex = 39;
             this.btnAddTimestamp.Text = "No record for this day. Click here to add a new entry.";
             this.btnAddTimestamp.UseVisualStyleBackColor = true;
@@ -83,9 +83,9 @@
             // 
             this.groupBox1.Controls.Add(this.lblTotalBalance);
             this.groupBox1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox1.Location = new System.Drawing.Point(0, 463);
+            this.groupBox1.Location = new System.Drawing.Point(0, 570);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(765, 56);
+            this.groupBox1.Size = new System.Drawing.Size(935, 56);
             this.groupBox1.TabIndex = 9;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Total";
@@ -111,7 +111,7 @@
             this.cmbStatisticRange.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cmbStatisticRange.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbStatisticRange.FormattingEnabled = true;
-            this.cmbStatisticRange.Location = new System.Drawing.Point(118, 259);
+            this.cmbStatisticRange.Location = new System.Drawing.Point(118, 366);
             this.cmbStatisticRange.Name = "cmbStatisticRange";
             this.cmbStatisticRange.Size = new System.Drawing.Size(88, 21);
             this.cmbStatisticRange.TabIndex = 35;
@@ -121,15 +121,15 @@
             this.cmbStatisticType.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cmbStatisticType.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cmbStatisticType.FormattingEnabled = true;
-            this.cmbStatisticType.Location = new System.Drawing.Point(6, 259);
+            this.cmbStatisticType.Location = new System.Drawing.Point(6, 366);
             this.cmbStatisticType.Name = "cmbStatisticType";
             this.cmbStatisticType.Size = new System.Drawing.Size(106, 21);
             this.cmbStatisticType.TabIndex = 34;
             // 
             // chart1
             // 
-            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.chart1.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             chartArea1.Name = "ChartArea1";
             this.chart1.ChartAreas.Add(chartArea1);
@@ -142,7 +142,7 @@
             series1.IsXValueIndexed = true;
             series1.Name = "S";
             this.chart1.Series.Add(series1);
-            this.chart1.Size = new System.Drawing.Size(535, 231);
+            this.chart1.Size = new System.Drawing.Size(705, 338);
             this.chart1.TabIndex = 33;
             this.chart1.Text = "chart1";
             // 
@@ -174,18 +174,18 @@
             this.groupBox2.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBox2.Location = new System.Drawing.Point(0, 110);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(765, 291);
+            this.groupBox2.Size = new System.Drawing.Size(935, 398);
             this.groupBox2.TabIndex = 37;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = "History";
             // 
             // flpChartFilter
             // 
-            this.flpChartFilter.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)
+            this.flpChartFilter.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.flpChartFilter.Location = new System.Drawing.Point(224, 259);
+            this.flpChartFilter.Location = new System.Drawing.Point(224, 366);
             this.flpChartFilter.Name = "flpChartFilter";
-            this.flpChartFilter.Size = new System.Drawing.Size(535, 21);
+            this.flpChartFilter.Size = new System.Drawing.Size(705, 21);
             this.flpChartFilter.TabIndex = 37;
             // 
             // StampCalendar
@@ -204,9 +204,9 @@
             this.groupBox3.Controls.Add(this.btnTakeDayOff);
             this.groupBox3.Controls.Add(this.btnDeleteStamp);
             this.groupBox3.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.groupBox3.Location = new System.Drawing.Point(0, 401);
+            this.groupBox3.Location = new System.Drawing.Point(0, 508);
             this.groupBox3.Name = "groupBox3";
-            this.groupBox3.Size = new System.Drawing.Size(765, 62);
+            this.groupBox3.Size = new System.Drawing.Size(935, 62);
             this.groupBox3.TabIndex = 38;
             this.groupBox3.TabStop = false;
             this.groupBox3.Text = "Settings and Actions";
@@ -214,7 +214,7 @@
             // btnSettings
             // 
             this.btnSettings.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnSettings.Location = new System.Drawing.Point(649, 27);
+            this.btnSettings.Location = new System.Drawing.Point(819, 27);
             this.btnSettings.Name = "btnSettings";
             this.btnSettings.Size = new System.Drawing.Size(110, 23);
             this.btnSettings.TabIndex = 35;
@@ -234,14 +234,14 @@
             // 
             // timelineToday
             // 
-            this.timelineToday.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.timelineToday.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.timelineToday.Location = new System.Drawing.Point(6, 3);
             this.timelineToday.Manager = null;
             this.timelineToday.Name = "timelineToday";
             this.timelineToday.Owner = null;
-            this.timelineToday.Size = new System.Drawing.Size(753, 101);
+            this.timelineToday.Size = new System.Drawing.Size(923, 101);
             this.timelineToday.Stamp = null;
             this.timelineToday.TabIndex = 37;
             // 
@@ -252,14 +252,14 @@
             this.pnlToday.Dock = System.Windows.Forms.DockStyle.Top;
             this.pnlToday.Location = new System.Drawing.Point(0, 0);
             this.pnlToday.Name = "pnlToday";
-            this.pnlToday.Size = new System.Drawing.Size(765, 110);
+            this.pnlToday.Size = new System.Drawing.Size(935, 110);
             this.pnlToday.TabIndex = 0;
             // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(765, 519);
+            this.ClientSize = new System.Drawing.Size(935, 626);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.pnlToday);
             this.Controls.Add(this.groupBox3);

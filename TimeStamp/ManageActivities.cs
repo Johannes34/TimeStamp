@@ -59,6 +59,27 @@ namespace TimeStamp
                 }
             }
 
+            chkEnableAutoTrackApplications.Checked = m_settings.EnableAutoTrackingApplications;
+            grdAutoTrackApplications.Rows.Clear();
+            foreach (var app in m_settings.AutoTrackingApplications)
+            {
+                int index = grdAutoTrackApplications.Rows.Add(app.Key, app.Value, "");
+                grdAutoTrackApplications.Rows[index].Tag = app.Value;
+
+                var button = grdAutoTrackApplications.Rows[index].Cells[m_appDeleteColumnIndex] as DataGridViewButtonCell;
+
+                var hasAffectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Any(r => r.Tags.Contains(app.Value));
+                if (hasAffectedRecords)
+                    button.Style.ForeColor = SystemColors.ControlDark;
+            }
+
+            chkEnableAutoTagging.Checked = m_settings.EnableAutoTagging;
+            grdAutoTag.Rows.Clear();
+            foreach (var tag in m_settings.AutoTagging)
+            {
+                int index = grdAutoTag.Rows.Add(tag.Key, tag.Value, "");
+            }
+
             UpdateEnabled();
         }
 
@@ -365,5 +386,193 @@ namespace TimeStamp
             m_settings.Tags[category].Add(tag);
             return true;
         }
+
+
+
+        // Auto-Track Apps Grid:
+
+        private int m_appDeleteColumnIndex = 2;
+
+        private void chkEnableAutoTrackApplications_CheckedChanged(object sender, EventArgs e)
+        {
+            m_settings.EnableAutoTrackingApplications = chkEnableAutoTrackApplications.Checked;
+        }
+
+        private void grdAutoTrackApplications_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex == -1)
+                return;
+
+            var currentRow = grdAutoTrackApplications.Rows[e.RowIndex];
+
+            var appWindowTitle = grdAutoTrackApplications.Rows[e.RowIndex].Cells[0].Value as string;
+            var appName = grdAutoTrackApplications.Rows[e.RowIndex].Cells[1].Value as string;
+
+            if (e.ColumnIndex == 0)
+            {
+                // update app window title:
+                // no prob, since title key is not saved to xml / data objects...
+                RemoveAppFromSettings(appWindowTitle);
+                AddAppToSettings(appWindowTitle, appName);
+            }
+            else if (e.ColumnIndex == 1)
+            {
+                // update app name:
+
+                string oldName = currentRow.Tag as string;
+                string newName = appName;
+
+                var affectedDays = m_manager.StampList.Where(s => s.ActivityRecords.Any(r => r.Tags.Contains(oldName))).ToList();
+                var affectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Tags.Contains(oldName)).ToList();
+
+                DialogResult result;
+
+                // new activity -> just rename without asking
+                // nothing affected -> just rename without asking
+                if (oldName == null || affectedRecords.Count == 0)
+                    result = DialogResult.Yes;
+                // otherwise -> ask whether to really rename?
+                else
+                    result = MessageBox.Show(this, $"Really rename app '{oldName}' to '{newName}' for all stamps? ({affectedDays.Count} days / {affectedRecords.Count} activities affected).", "Rename App?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+                if (result == DialogResult.Yes)
+                {
+                    currentRow.Tag = newName;
+                    foreach (var affect in affectedRecords)
+                    {
+                        affect.Tags.Remove(oldName);
+                        affect.Tags.Add(newName);
+                    }
+
+                    RemoveAppFromSettings(appWindowTitle);
+                    AddAppToSettings(appWindowTitle, newName); // on tag merging, this method will return 'false', as the tag already exists...
+
+                    // refresh grid:
+                    FillGrid();
+                }
+                else
+                {
+                    grdAutoTrackApplications.Rows[e.RowIndex].Cells[1].Value = oldName;
+                }
+            }
+        }
+
+        private void grdAutoTrackApplications_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            var senderGrid = (DataGridView)sender;
+
+            if (senderGrid.Columns[e.ColumnIndex] is DataGridViewButtonColumn && e.RowIndex >= 0)
+            {
+                // delete activity button clicked:
+
+                var app = senderGrid.Rows[e.RowIndex].Tag as string;
+
+                var affectedDays = m_manager.StampList.Where(s => s.ActivityRecords.Any(r => r.Tags.Contains(app))).ToList();
+                var affectedRecords = m_manager.StampList.SelectMany(s => s.ActivityRecords).Where(r => r.Tags.Contains(app)).ToList();
+
+                if (affectedRecords.Any())
+                {
+                    var result = MessageBox.Show(this, $"Really delete app '{app}'? It is set on {affectedDays.Count} days / {affectedRecords.Count} activities. This will remove this app from all these days/activities.", "Delete App?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    if (result != DialogResult.Yes)
+                        return;
+                }
+
+                // delete from activities:
+                foreach (var record in affectedRecords)
+                    record.Tags.Remove(app);
+
+                // delete from settings:
+                var appWindowTitle = senderGrid.Rows[e.RowIndex].Cells[0].Value as string;
+                RemoveAppFromSettings(appWindowTitle);
+
+                // delete from grid:
+                FillGrid();
+            }
+        }
+
+        private void RemoveAppFromSettings(string appWindowTitle)
+        {
+            if (m_settings.AutoTrackingApplications.ContainsKey(appWindowTitle))
+                m_settings.AutoTrackingApplications.Remove(appWindowTitle);
+        }
+
+        private bool AddAppToSettings(string appWindowTitle, string appName)
+        {
+            if (m_settings.AutoTrackingApplications.ContainsKey(appWindowTitle))
+                return false;
+
+            m_settings.AutoTrackingApplications.Add(appWindowTitle, appName);
+            return true;
+        }
+
+
+        // Auto-Tag Grid:
+
+        private void chkEnableAutoTagging_CheckedChanged(object sender, EventArgs e)
+        {
+            m_settings.EnableAutoTagging = chkEnableAutoTagging.Checked;
+        }
+
+        private void grdAutoTag_CellValueChanged(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex == -1)
+                return;
+
+            var currentRow = grdAutoTag.Rows[e.RowIndex];
+
+            var regex = grdAutoTag.Rows[e.RowIndex].Cells[0].Value as string;
+            var tag = grdAutoTag.Rows[e.RowIndex].Cells[1].Value as string;
+
+            if (e.ColumnIndex == 0)
+            {
+                // update regex:
+                // no prob, since title key is not saved to xml / data objects...
+                RemoveAutoTagFromSettings(regex);
+                AddAutoTagToSettings(regex, tag);
+            }
+            else if (e.ColumnIndex == 1)
+            {
+                // update category:tag:
+
+                RemoveAutoTagFromSettings(regex);
+                AddAutoTagToSettings(regex, tag);
+
+                // refresh grid:
+                FillGrid();
+            }
+        }
+
+        private void grdAutoTag_CellContentClick(object sender, DataGridViewCellEventArgs e)
+        {
+            var senderGrid = (DataGridView)sender;
+
+            if (senderGrid.Columns[e.ColumnIndex] is DataGridViewButtonColumn && e.RowIndex >= 0)
+            {
+                // delete button clicked:
+
+                // delete from settings:
+                var regex = senderGrid.Rows[e.RowIndex].Cells[0].Value as string;
+                RemoveAutoTagFromSettings(regex);
+
+                // delete from grid:
+                FillGrid();
+            }
+        }
+
+        private void RemoveAutoTagFromSettings(string regex)
+        {
+            if (m_settings.AutoTagging.ContainsKey(regex))
+                m_settings.AutoTagging.Remove(regex);
+        }
+
+        private bool AddAutoTagToSettings(string regex, string tag)
+        {
+            if (m_settings.AutoTagging.ContainsKey(regex))
+                return false;
+
+            m_settings.AutoTagging.Add(regex, tag);
+            return true;
+        }
+
     }
 }

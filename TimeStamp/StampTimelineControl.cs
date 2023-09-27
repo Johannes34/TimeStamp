@@ -262,6 +262,7 @@ namespace TimeStamp
                 var menuItem = new ToolStripMenuItem(temp, null, (ss, ee) =>
                 {
                     currentActivity.Activity = temp;
+                    currentActivity.Tags.Clear();
                     RequestRefresh.Invoke();
                 });
 

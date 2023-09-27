@@ -64,7 +64,7 @@ namespace TimeStamp
 
         public static PopupDialog ShowAfterPause(TimeSpan pauseDuration, string activity)
         {
-            var diag = new PopupDialog(String.Format("Today's pause was {0} minutes. You are continuing with '{1}'...", pauseDuration.TotalMinutes, activity), null, TimeSpan.FromSeconds(8));
+            var diag = new PopupDialog(String.Format("Your pause was {0} minutes. You are continuing with '{1}'...", (int)pauseDuration.TotalMinutes, activity), null, TimeSpan.FromSeconds(8));
             diag.StartShowing(DefaultOwner);
             return diag;
         }
