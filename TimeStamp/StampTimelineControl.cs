@@ -365,6 +365,25 @@ namespace TimeStamp
                 //UpdateTimeline();
             };
             setComment.DropDownItems.Add(commentText);
+
+            // add previously used comments to quick select:
+            var recentComments = Manager.GetRecentActivityComments(10);
+            if (recentComments.Any())
+            {
+                setComment.DropDownItems.Add(new ToolStripSeparator());
+
+                foreach (var recentComment in recentComments)
+                {
+                    var recentCommentItem = new ToolStripMenuItem() { Text = recentComment };
+                    recentCommentItem.Click += (ss, ee) =>
+                    {
+                        currentActivity.Comment = ((ToolStripMenuItem)ss).Text;
+                        RequestRefresh.Invoke();
+                        //UpdateTimeline();
+                    };
+                    setComment.DropDownItems.Add(recentCommentItem);
+                }
+            }
         }
 
         private void TimeLine_SeparatorClicked(TimelineControl sender, TimelineSection clickedEndSeparator, TimelineSection clickedStartSeparator, MouseEventArgs e, double clickedPosition)
@@ -561,7 +580,7 @@ namespace TimeStamp
                     ForeColor = activityColor,
                     TooltipHeader = activity.Activity,
                     TooltipBody = String.Join(Environment.NewLine, new[] { (activity.End.HasValue ? "" : "This activity is currently running..."), activityTags, activity.Comment }.Where(s => !String.IsNullOrEmpty(s))),
-                    TooltipDurationCustomText = activity.End != null && activity.Begin != null ? $"Duration: {Manager.FormatTimeSpan(activity.End.Value - activity.Begin.Value)}" : null,
+                    TooltipDurationCustomText = activity.Begin != null ? $"Duration: {Manager.FormatTimeSpan((activity.End ?? DateTime.Now.TimeOfDay) - activity.Begin.Value)}" : null,
                     DisplayText = activity.Activity,
                 };
 

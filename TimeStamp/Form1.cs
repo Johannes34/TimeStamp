@@ -117,7 +117,7 @@ namespace TimeStamp
 
             timelineToday.Owner = this;
             timelineToday.Manager = Manager;
-            timelineToday.RequestRefresh += RefreshControls;
+            timelineToday.RequestRefresh += () => { RefreshControls(); Manager.SaveStampListXml(); };
 
             lblTotalBalance.MaximumSize = groupBox1.Size;
             RefreshControls();
@@ -191,7 +191,8 @@ namespace TimeStamp
 
         // Control Handling:
 
-        private void RefreshControls()
+        private void RefreshControls() => RefreshControls(false);
+        private void RefreshControls(bool forceRebuildFilterControls)
         {
             if (this.WindowState == FormWindowState.Minimized)
                 return;
@@ -215,7 +216,7 @@ namespace TimeStamp
             StampCalendar.DateChanged += StampCalendar_DateChanged;
 
             // updateStatistics:
-            UpdateStatistics();
+            UpdateStatistics(forceRebuildFilterControls);
 
             // updateTimeline:
             timelineToday.Stamp = CurrentShown;
@@ -319,7 +320,7 @@ namespace TimeStamp
             {
                 btnAddTimestamp.Visible = false;
                 Manager.CurrentShown = selectedStamp;
-                RefreshControls();
+                RefreshControls(true);
             }
         }
 
@@ -372,7 +373,7 @@ namespace TimeStamp
             return s_seaGreenPalette[0];
         }
 
-        private void CreateFilterControls(string[] allComments, bool force = false)
+        private void CreateFilterControls(string[] allComments, string[] allActivities, string[] allCategories, bool force = false)
         {
             if (flpChartFilter.Controls.Count == 0 || force)
             {
@@ -383,7 +384,7 @@ namespace TimeStamp
                 actCmb.DropDownStyle = ComboBoxStyle.DropDownList;
                 actCmb.Items.Add(FilterControl_SelectActivityText());
                 actCmb.Items.Add(FilterControl_AllActivitiesText());
-                foreach (var activity in Settings.TrackedActivities)
+                foreach (var activity in allActivities) // Settings.TrackedActivities)
                     actCmb.Items.Add(activity);
                 actCmb.SelectedItem = String.IsNullOrEmpty(Settings.StatisticActivityFilter) ? FilterControl_SelectActivityText() : Settings.StatisticActivityFilter;
                 actCmb.SelectedIndexChanged += ActivityFilter_SelectedIndexChanged;
@@ -399,13 +400,17 @@ namespace TimeStamp
 
                 foreach (var tagCategory in Settings.Tags)
                 {
+                    var keysInCategory = tagCategory.Value.Where(v => allCategories.Contains(v)).ToArray();
+                    if (!keysInCategory.Any())
+                        continue; // skip creating filter for category...
+
                     var cmb = new ComboBox();
                     cmb.Margin = new Padding(3, 0, 3, 0);
                     cmb.DropDownStyle = ComboBoxStyle.DropDownList;
                     cmb.Tag = tagCategory.Key;
                     cmb.Items.Add(FilterControl_SelectCategoryText(tagCategory.Key));
                     cmb.Items.Add(FilterControl_AllCategoriesText(tagCategory.Key));
-                    foreach (var tag in tagCategory.Value)
+                    foreach (var tag in keysInCategory)// tagCategory.Value)
                         cmb.Items.Add(tag);
                     cmb.SelectedItem = !Settings.StatisticTagCategoryFilter.ContainsKey(tagCategory.Key) ? FilterControl_SelectCategoryText(tagCategory.Key) : Settings.StatisticTagCategoryFilter[tagCategory.Key];
                     cmb.SelectedIndexChanged += CategoryFilter_SelectedIndexChanged;
@@ -500,7 +505,7 @@ namespace TimeStamp
             UpdateStatistics();
         }
 
-        private void UpdateStatistics()
+        private void UpdateStatistics(bool forceRebuildFilterControls = false)
         {
             //Update Statistics Chart:
             chart1.Titles.Clear();
@@ -554,9 +559,12 @@ namespace TimeStamp
             else if (Settings.StatisticType == TimeSettings.StatisticTypes.Activities)
             {
                 var allActiviesInRange = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords);
+                var allActivityKeys = allActiviesInRange.Select(a => a.Activity).Distinct().ToArray();
+                var allCategories = allActiviesInRange.SelectMany(a => a.Tags).Distinct().ToArray();
                 var allComments = allActiviesInRange.Select(a => a.Comment).Distinct().ToArray();
 
-                CreateFilterControls(allComments);
+                // forceRebuildFilterControls will cause a short flicker, but is necessary to get new comments updated in the combobox etc..
+                CreateFilterControls(allComments, allActivityKeys, allCategories, forceRebuildFilterControls);
                 flpChartFilter.Visible = true;
 
                 Statistics.ChartType = SeriesChartType.Pie;
@@ -911,12 +919,12 @@ namespace TimeStamp
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
         {
             Settings.StatisticType = (TimeSettings.StatisticTypes)cmbStatisticType.SelectedIndex;
-            UpdateStatistics();
+            UpdateStatistics(true);
         }
         private void comboBox2_SelectedIndexChanged(object sender, EventArgs e)
         {
             Settings.StatisticRange = (TimeSettings.StatisticRanges)cmbStatisticRange.SelectedIndex;
-            UpdateStatistics();
+            UpdateStatistics(true);
         }
         private void ActivityFilter_SelectedIndexChanged(object sender, EventArgs e)
         {

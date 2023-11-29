@@ -359,7 +359,7 @@ namespace TimeStamp
 
         #region XML-IO
 
-        private void SaveStampListXml()
+        public void SaveStampListXml()
         {
             if (Settings.IgnoreStampFile)
                 return;
@@ -479,13 +479,18 @@ namespace TimeStamp
                     stamp.ActivityRecords.Clear();
                     foreach (var actxml in stampXml.Element("Activities").Elements("Activity"))
                     {
-                        var record = new ActivityRecord()
-                        {
-                            Activity = actxml.Attribute("Name").Value,
-                            Begin = ParseHHMM(actxml.Attribute("Begin").Value),
-                            End = ParseHHMM(actxml.Attribute("End").Value),
-                            Comment = actxml.Attribute("Comment").Value
-                        };
+                        var record = new ActivityRecord();
+                        record.Activity = actxml.Attribute("Name").Value;
+                        record.Begin = ParseHHMM(actxml.Attribute("Begin").Value);
+                        
+                        var endValue = actxml.Attribute("End").Value;
+                        if (!String.IsNullOrEmpty(endValue)) // currently running activity..?
+                            record.End = ParseHHMM(endValue);
+                        else if (stamp.Day.Date != DateTime.Today)
+                            throw new Exception($"Time stamp for {stamp.Day.ToShortDateString()} does not have an end time.");
+
+                        record.Comment = actxml.Attribute("Comment").Value;
+
                         foreach (var tagAttrib in actxml.Attributes().Where(a => a.Name.LocalName.StartsWith("Tag_")))
                             record.Tags.Add(tagAttrib.Value);
 
@@ -933,6 +938,19 @@ namespace TimeStamp
 
 
         // Tagging:
+
+        public string[] GetRecentActivityComments(int count = 10)
+        {
+            var recentComments = StampList
+                .OrderByDescending(a => a.Day)
+                .SelectMany(s => s.ActivityRecords)
+                .Where(a => !String.IsNullOrEmpty(a.Comment) && a.Begin.HasValue)
+                .Select(a => a.Comment)
+                .Distinct()
+                .Take(count)
+                .ToArray();
+            return recentComments;
+        }
 
         public List<string[]> GetMostFrequentTags(string activity = null, int count = 5, TimeSpan? recentActivities = null)
         {
