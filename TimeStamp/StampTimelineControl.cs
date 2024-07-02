@@ -643,32 +643,5 @@ namespace TimeStamp
 
             RequestRefresh.Invoke();
         }
-
-        private void txtBegin_TextChanged(object sender, EventArgs e)
-        {
-            if (TimeManager.TryParseHHMM(txtBegin.Text, out TimeSpan newBegin))
-            {
-                TimeManager.SetBegin(Stamp, newBegin);
-                RequestRefresh.Invoke();
-            }
-        }
-
-        private void txtEnd_TextChanged(object sender, EventArgs e)
-        {
-            if (TimeManager.TryParseHHMM(txtEnd.Text, out TimeSpan newEnd))
-            {
-                TimeManager.SetEnd(Stamp, newEnd);
-                RequestRefresh.Invoke();
-            }
-        }
-
-        private void txtPause_TextChanged(object sender, EventArgs e)
-        {
-            if (int.TryParse(txtPause.Text, out int pauseMins))
-            {
-                Manager.SetPause(Stamp, TimeSpan.FromMinutes(pauseMins), true);
-                RequestRefresh.Invoke();
-            }
-        }
     }
 }

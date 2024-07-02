@@ -18,17 +18,40 @@ namespace TimeStamp
             ActivityRecords = new List<ActivityRecord>();
         }
 
-        public Stamp(DateTime day, TimeSpan begin, int workingHours)
+        public Stamp(DateTime day, int workingHours)
             : this(workingHours)
         {
             this.Day = day;
-            this.Begin = begin;
         }
 
         public DateTime Day { get; set; }
-        public TimeSpan Begin { get; set; }
-        public TimeSpan End { get; set; }
-        public TimeSpan Pause { get; set; }
+
+        public TimeSpan Begin
+        {
+            get
+            {
+                if (!ActivityRecords.Any())
+                    return TimeSpan.Zero;
+                return ActivityRecords.Min(r => r.Begin);
+            }
+        }
+
+        public TimeSpan End
+        {
+            get
+            {
+                if (!ActivityRecords.Any())
+                    return TimeSpan.Zero;
+                return ActivityRecords.Where(r => r.End.HasValue).Max(r => r.End.Value);
+            }
+        }
+
+        public TimeSpan Pause => (End - Begin) - WorkedHours;
+
+        public TimeSpan WorkedHours => ActivityRecords.Sum(r => r.Duration);
+
+        public TimeSpan Balance => WorkedHours - TimeSpan.FromHours(WorkingHours);
+
         public string Comment { get; set; }
         public int WorkingHours { get; set; }
 
@@ -59,7 +82,7 @@ namespace TimeStamp
                 return null;
 
             // with the first start:
-            var firstStart = records.OrderBy(r => r.Begin.Value.TotalMinutes).FirstOrDefault();
+            var firstStart = records.OrderBy(r => r.Begin.TotalMinutes).FirstOrDefault();
             return firstStart;
         }
 
@@ -90,13 +113,13 @@ namespace TimeStamp
 
         public List<string> Tags { get; set; } = new List<string>();
 
-        public TimeSpan? Begin { get; set; }
+        public TimeSpan Begin { get; set; }
 
         public TimeSpan? End { get; set; }
 
         public string Comment { get; set; }
 
         [XmlIgnore]
-        public TimeSpan? Duration => Begin.HasValue && End.HasValue ? (End.Value - Begin.Value) : default;
+        public TimeSpan Duration => (End.HasValue ? End.Value : TimeManager.GetNowTime()) - Begin;
     }
 }

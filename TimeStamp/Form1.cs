@@ -42,8 +42,6 @@ namespace TimeStamp
 
         // TODO:
 
-        // - bug bei tageswechsel (funktioniert nicht mehr) -- neuer stamp wird nicht angelegt
-
         // replace 'day comment' with 'day tags' (same principle as activity tags, but in a separate definition table)
         // e.g. Category Location -- Home, Office, Customer
         // e.g. Lunch -- Subway, Bakery, Dillinger
@@ -559,9 +557,9 @@ namespace TimeStamp
             else if (Settings.StatisticType == TimeSettings.StatisticTypes.Activities)
             {
                 var allActiviesInRange = GetTimeStampsInRange(true).SelectMany(s => s.ActivityRecords);
-                var allActivityKeys = allActiviesInRange.Select(a => a.Activity).Distinct().ToArray();
-                var allCategories = allActiviesInRange.SelectMany(a => a.Tags).Distinct().ToArray();
-                var allComments = allActiviesInRange.Select(a => a.Comment).Distinct().ToArray();
+                var allActivityKeys = allActiviesInRange.Select(a => a.Activity).Distinct().Where(a => a != null).ToArray();
+                var allCategories = allActiviesInRange.SelectMany(a => a.Tags).Distinct().Where(a => a != null).ToArray();
+                var allComments = allActiviesInRange.Select(a => a.Comment).Distinct().Where(a => a != null).ToArray();
 
                 // forceRebuildFilterControls will cause a short flicker, but is necessary to get new comments updated in the combobox etc..
                 CreateFilterControls(allComments, allActivityKeys, allCategories, forceRebuildFilterControls);

@@ -189,7 +189,6 @@ namespace TimeStamp
             if (existing != null)
             {
                 Today = CurrentShown = existing;
-                Today.End = TimeSpan.Zero;
 
                 // TODO: (optionally) ask in a notification, whether have been working or not since last known stamp (default yes, if choosing no will automatically insert a pause)...
 
@@ -219,7 +218,7 @@ namespace TimeStamp
             // new day, new stamp:
 
             TodayCurrentActivity = null;
-            Today = CurrentShown = new Stamp(Time.Today, GetNowTime(), Settings.GetDefaultWorkingHours(Time.Today));
+            Today = CurrentShown = new Stamp(Time.Today, Settings.GetDefaultWorkingHours(Time.Today));
             StampList.Add(Today);
 
             string startingActivity = GetDefaultStartingActivity(Time.Today, out var mostRecent);
@@ -276,7 +275,7 @@ namespace TimeStamp
             // there shouldnt be any unrecoverable loss, as the end should be resembled by an according activity end time.
             if (Today.End != default(TimeSpan))
             {
-                Today.End = default(TimeSpan);
+                //Today.End = default(TimeSpan);
                 // it is also necessary to update the pause time:
                 CalculatePauseFromActivities(Today);
             }
@@ -321,8 +320,8 @@ namespace TimeStamp
 
             // update end time:
             // if end time has been inserted and is smaller than current end time, set new end time to 'now' (TODO: is this always desired? usually end time is empty anyway, except when explicitly provided...)
-            if (Today.Begin.TotalMinutes != 0 && (explicitEndTime.HasValue || Today.End.TotalMinutes < Time.Now.TimeOfDay.TotalMinutes))
-                Today.End = explicitEndTime ?? GetNowTime();
+            //if (Today.Begin.TotalMinutes != 0 && (explicitEndTime.HasValue || Today.End.TotalMinutes < Time.Now.TimeOfDay.TotalMinutes))
+            //    Today.End = explicitEndTime ?? GetNowTime();
 
             FinishActivity(Today.End);
 
@@ -467,9 +466,6 @@ namespace TimeStamp
                 var stamp = new Stamp(Settings.DefaultWorkingHours)
                 {
                     Day = Convert.ToDateTime(stampXml.Element("day").Value),
-                    Begin = ParseHHMM(stampXml.Element("begin").Value),
-                    End = ParseHHMM(stampXml.Element("end").Value),
-                    Pause = SerializeMM(stampXml.Element("pause").Value),
                     Comment = stampXml.Element("comment") != null ? stampXml.Element("comment").Value : String.Empty,
                     WorkingHours = stampXml.Element("hours") != null ? Convert.ToInt32(stampXml.Element("hours").Value) : 8 // legacy, when value was not configurable it was always 8
                 };
@@ -501,6 +497,18 @@ namespace TimeStamp
                     }
                 }
 
+                if (stampXml.Element("begin") != null && stampXml.Element("end") != null && stampXml.Element("pause") != null)
+                {
+                    var legacyDayBegin = ParseHHMM(stampXml.Element("begin").Value);
+                    var legacyDayEnd = ParseHHMM(stampXml.Element("end").Value);
+                    var legacyDayPause = SerializeMM(stampXml.Element("pause").Value);
+
+                    if (!stamp.ActivityRecords.Any())
+                    {
+                        stamp.ActivityRecords.Add(new ActivityRecord() { Activity = "", Begin = legacyDayBegin, End = legacyDayEnd - legacyDayPause, Comment = "Legacy stamp" });
+                    }
+                }
+
                 stamps.Add(stamp);
             }
 
@@ -514,9 +522,6 @@ namespace TimeStamp
 
         public void TakeDayOff(Stamp stamp)
         {
-            stamp.Begin = new TimeSpan(8, 0, 0);
-            stamp.End = new TimeSpan(8, 0, 0);
-            stamp.Pause = new TimeSpan(0);
             stamp.ActivityRecords.Clear();
         }
 
@@ -577,30 +582,9 @@ namespace TimeStamp
             {
                 if (stamp.Day == Time.Today)
                     continue;
-                totalBalance = totalBalance.Add(DayBalance(stamp));
+                totalBalance = totalBalance.Add(stamp.Balance);
             }
             return totalBalance;
-        }
-
-        public TimeSpan DayBalance(Stamp stamp) => DayTime(stamp) - TimeSpan.FromHours(stamp.WorkingHours);
-
-        public TimeSpan DayTime(Stamp stamp)
-        {
-            if (stamp.Day == Time.Today && stamp.End == TimeSpan.Zero)
-                return GetNowTime().Subtract(stamp.Begin).Subtract(stamp.Pause);
-            else
-                return stamp.End.Subtract(stamp.Begin).Subtract(stamp.Pause);
-        }
-
-        public static TimeSpan Total(ActivityRecord activity)
-        {
-            if (!activity.Begin.HasValue)
-                return TimeSpan.Zero;
-
-            if (!activity.End.HasValue) // assuming this can only happen if it is the today's stamp and not yet checked out...
-                return GetNowTime() - activity.Begin.Value;
-
-            return activity.End.Value - activity.Begin.Value;
         }
 
 
@@ -618,7 +602,7 @@ namespace TimeStamp
             else if (value > stamp.Begin)
             {
                 // cut off earlier activities and/or set the earliest activity to the correct later begin time
-                var activities = stamp.ActivityRecords.OrderBy(r => r.Begin.Value).ToArray();
+                var activities = stamp.ActivityRecords.OrderBy(r => r.Begin).ToArray();
                 foreach (var act in activities)
                 {
                     // starts before 'new check-in' and ends before 'new check-in': remove activity completely:
